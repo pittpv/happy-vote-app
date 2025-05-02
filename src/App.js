@@ -12,6 +12,17 @@ function App() {
   const [sadVotes, setSadVotes] = useState(0);
   const [canVote, setCanVote] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(null);
+
+  useEffect(() => {
+    let interval;
+    if (timeLeft > 0) {
+      interval = setInterval(() => {
+        setTimeLeft((prev) => Math.max(prev - 1, 0));
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [timeLeft]);
 
   const connectWallet = async () => {
     try {
@@ -32,6 +43,7 @@ function App() {
 
       await updateVotes(newContract);
       await checkCanVote(newContract, accounts[0]);
+      await getTimeUntilNextVote(newContract, accounts[0]);
     } catch (err) {
       console.error("Wallet connection failed", err);
       alert("Failed to connect wallet.");
@@ -57,6 +69,15 @@ function App() {
     }
   };
 
+  const getTimeUntilNextVote = async (contractInstance, user) => {
+    try {
+      const seconds = await contractInstance.timeUntilNextVote(user);
+      setTimeLeft(Number(seconds));
+    } catch (err) {
+      console.error("Failed to fetch time until next vote:", err);
+    }
+  };
+
   const vote = async (isHappy) => {
     if (!contract) {
       alert("Please connect wallet first.");
@@ -70,6 +91,7 @@ function App() {
 
       await updateVotes(contract);
       await checkCanVote(contract, account);
+      await getTimeUntilNextVote(contract, account);
     } catch (err) {
       console.error("Vote failed:", err);
       alert("Vote failed or already voted.");
@@ -113,9 +135,16 @@ function App() {
               </div>
 
               {!canVote && (
-                  <p style={{ color: "red" }}>
-                    You’ve already voted. Try again in 24 hours.
-                  </p>
+                  <div>
+                    <p style={{ color: "red" }}>
+                      You’ve already voted. Try again in 24 hours.
+                    </p>
+                    {timeLeft !== null && timeLeft > 0 && (
+                        <p style={{ color: "gray" }}>
+                          You can vote again in {formatTime(timeLeft)}
+                        </p>
+                    )}
+                  </div>
               )}
 
               <h3>Current Mood</h3>
