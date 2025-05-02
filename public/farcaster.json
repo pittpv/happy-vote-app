@@ -1,0 +1,7 @@
+{
+  "name": "Happy Vote",
+  "description": "Vote for good mood!",
+  "icon": "https://happy-vote-app.vercel.app/icon.png",
+  "url": "https://happy-vote-app.vercel.app/",
+  "requestedCapabilities": []
+}
