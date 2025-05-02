@@ -79,8 +79,8 @@ function App() {
   };
 
   const totalVotes = happyVotes + sadVotes;
-  const happyPercent = totalVotes ? ((happyVotes / totalVotes) * 100).toFixed(1) : 0;
-  const sadPercent = totalVotes ? ((sadVotes / totalVotes) * 100).toFixed(1) : 0;
+  const happyPercent = totalVotes ? Math.round((happyVotes / totalVotes) * 100) : 0;
+  const sadPercent = totalVotes ? 100 - happyPercent : 0;
 
   return (
       <div style={{ fontFamily: "Arial", textAlign: "center", marginTop: "40px" }}>
