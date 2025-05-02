@@ -79,8 +79,8 @@ function App() {
   };
 
   const totalVotes = happyVotes + sadVotes;
-  const happyPercent = totalVotes > 0 ? (happyVotes / totalVotes) * 100 : 0;
-  const sadPercent = totalVotes > 0 ? (sadVotes / totalVotes) * 100 : 0;
+  const happyPercent = totalVotes ? ((happyVotes / totalVotes) * 100).toFixed(1) : 0;
+  const sadPercent = totalVotes ? ((sadVotes / totalVotes) * 100).toFixed(1) : 0;
 
   return (
       <div style={{ fontFamily: "Arial", textAlign: "center", marginTop: "40px" }}>
@@ -120,6 +120,7 @@ function App() {
 
               <h3>Current Mood</h3>
               <p>😊 Happy: {happyPercent}%</p>
+              <p>😊 Happy: {happyVotes}</p>
               <p>😢 Sad: {sadPercent}%</p>
             </>
         )}
