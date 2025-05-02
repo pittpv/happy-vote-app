@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HappyVote - Farcaster Miniapp</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; }
+        #vote-buttons { margin-top: 20px; }
+        .button { font-size: 20px; padding: 10px 20px; margin: 10px; cursor: pointer; }
+        #counter { margin-top: 20px; font-size: 24px; }
+    </style>
+</head>
+<body>
+    <h1>Make the world happier</h1>
+    <div id="vote-buttons">
+        <button class="button" id="happy-button" onclick="vote(true)">😊 I'm Happy</button>
+        <button class="button" id="sad-button" onclick="vote(false)">😢 I'm Sad</button>
+    </div>
+    <div id="counter">
+        <p>Happy: <span id="happy-count">0</span> | Sad: <span id="sad-count">0</span></p>
+        <p>Next vote in <span id="time-left">0</span> seconds</p>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/ethers/dist/ethers.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
