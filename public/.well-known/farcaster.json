@@ -21,6 +21,7 @@
     "primaryCategory": "social",
     "buttonTitle": "Vote Now",
     "splashImageUrl": "https://happy-vote-app.vercel.app/splash.png",
-    "splashBackgroundColor": "#ffffff"
+    "splashBackgroundColor": "#ffffff",
+    "webhookUrl": "https://happy-vote-app.vercel.app/api/webhook"
   }
 }
