@@ -56,9 +56,12 @@ function App() {
       setHappyPercent(Number(happy));
       setSadPercent(Number(sad));
     } catch (err) {
-      console.error("Failed to fetch vote percentages:", err);
+      console.warn("No votes yet or failed to fetch percentages:", err);
+      setHappyPercent(0);
+      setSadPercent(0);
     }
   };
+
 
   const checkCanVote = async (contractInstance, user) => {
     try {
