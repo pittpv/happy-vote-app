@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { ethers } from "ethers";
 import abi from "./abi.json";
 
@@ -8,10 +8,21 @@ function App() {
   const [provider, setProvider] = useState(null);
   const [contract, setContract] = useState(null);
   const [account, setAccount] = useState(null);
-  const [happyVotes, setHappyVotes] = useState(0);
-  const [sadVotes, setSadVotes] = useState(0);
+  const [happyPercent, setHappyPercent] = useState(0);
+  const [sadPercent, setSadPercent] = useState(0);
   const [canVote, setCanVote] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(null);
+
+  useEffect(() => {
+    let interval;
+    if (timeLeft > 0) {
+      interval = setInterval(() => {
+        setTimeLeft((prev) => Math.max(prev - 1, 0));
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [timeLeft]);
 
   const connectWallet = async () => {
     try {
@@ -30,21 +41,22 @@ function App() {
       setProvider(newProvider);
       setContract(newContract);
 
-      await updateVotes(newContract);
+      await fetchPercentages(newContract);
       await checkCanVote(newContract, accounts[0]);
+      await getTimeUntilNextVote(newContract, accounts[0]);
     } catch (err) {
       console.error("Wallet connection failed", err);
       alert("Failed to connect wallet.");
     }
   };
 
-  const updateVotes = async (contractInstance) => {
+  const fetchPercentages = async (contractInstance) => {
     try {
-      const [happy, sad] = await contractInstance.getVotes();
-      setHappyVotes(Number(happy));
-      setSadVotes(Number(sad));
+      const [happy, sad] = await contractInstance.getVotePercentages();
+      setHappyPercent(Number(happy));
+      setSadPercent(Number(sad));
     } catch (err) {
-      console.error("Failed to fetch votes:", err);
+      console.error("Failed to fetch vote percentages:", err);
     }
   };
 
@@ -54,6 +66,15 @@ function App() {
       setCanVote(allowed);
     } catch (err) {
       console.error("Failed to check voting status:", err);
+    }
+  };
+
+  const getTimeUntilNextVote = async (contractInstance, user) => {
+    try {
+      const seconds = await contractInstance.timeUntilNextVote(user);
+      setTimeLeft(Number(seconds));
+    } catch (err) {
+      console.error("Failed to fetch time until next vote:", err);
     }
   };
 
@@ -68,8 +89,9 @@ function App() {
       const tx = await contract.vote(isHappy);
       await tx.wait();
 
-      await updateVotes(contract);
+      await fetchPercentages(contract);
       await checkCanVote(contract, account);
+      await getTimeUntilNextVote(contract, account);
     } catch (err) {
       console.error("Vote failed:", err);
       alert("Vote failed or already voted.");
@@ -78,9 +100,12 @@ function App() {
     }
   };
 
-  const totalVotes = happyVotes + sadVotes;
-  const happyPercent = totalVotes ? Math.round((happyVotes / totalVotes) * 100) : 0;
-  const sadPercent = totalVotes ? 100 - happyPercent : 0;
+  const formatTime = (sec) => {
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  };
 
   return (
       <div style={{ fontFamily: "Arial", textAlign: "center", marginTop: "40px" }}>
@@ -113,14 +138,20 @@ function App() {
               </div>
 
               {!canVote && (
-                  <p style={{ color: "red" }}>
-                    You’ve already voted. Try again in 24 hours.
-                  </p>
+                  <div>
+                    <p style={{ color: "red" }}>
+                      You’ve already voted. Try again in 24 hours.
+                    </p>
+                    {timeLeft !== null && timeLeft > 0 && (
+                        <p style={{ color: "gray" }}>
+                          You can vote again in {formatTime(timeLeft)}
+                        </p>
+                    )}
+                  </div>
               )}
 
               <h3>Current Mood</h3>
               <p>😊 Happy: {happyPercent}%</p>
-              <p>😊 Happy: {happyVotes}</p>
               <p>😢 Sad: {sadPercent}%</p>
             </>
         )}
