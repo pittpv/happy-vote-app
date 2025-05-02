@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { ethers } from "ethers";
 import abi from "./abi.json";
 
@@ -103,6 +103,13 @@ function App() {
   const totalVotes = happyVotes + sadVotes;
   const happyPercent = totalVotes ? Math.round((happyVotes / totalVotes) * 100) : 0;
   const sadPercent = totalVotes ? 100 - happyPercent : 0;
+
+  const formatTime = (sec) => {
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  };
 
   return (
       <div style={{ fontFamily: "Arial", textAlign: "center", marginTop: "40px" }}>
