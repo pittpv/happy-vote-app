@@ -156,8 +156,8 @@ function App() {
 
               <h3>Current Mood</h3>
               <p>😊 Happy: {happyPercent}%</p>
-              <p>😊 Happy: {happyVotes}</p>
               <p>😢 Sad: {sadPercent}%</p>
+              <p>🧮 Total voted: {totalVotes}</p>
             </>
         )}
       </div>
