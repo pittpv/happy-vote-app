@@ -33,5 +33,16 @@
     ],
     "stateMutability": "view",
     "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getVotes",
+    "outputs": [
+      { "internalType": "uint256", "name": "happy", "type": "uint256" },
+      { "internalType": "uint256", "name": "sad", "type": "uint256" }
+    ],
+    "stateMutability": "view",
+    "type": "function"
   }
+
 ]
