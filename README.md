@@ -1,6 +1,6 @@
 # 😄 Happy Vote MiniApp
 
-A lightweight miniapp for **Farcaster** that lets users vote on how they feel — either "Happy" 😊 or "Sad" 😢 — once every 24 hours. Built on the **Monad** blockchain using a Solidity smart contract.
+A standalone lightweight miniapp that lets users vote on how they feel — either "Happy" 😊 or "Sad" 😢 — once every 24 hours. Built on the **Monad** blockchain using a Solidity smart contract.
 
 ## 📦 Features
 
