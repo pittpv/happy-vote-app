@@ -350,6 +350,9 @@ function App() {
             <a href="https://x.com/pittpv" target="_blank" rel="noopener noreferrer">
               <button className="link-button">X (Twitter)</button>
             </a>
+            <a href="https://cards.monad.xyz/" target="_blank" rel="noopener noreferrer">
+              <button className="link-button">🙏🏻 Nominate @pittpv in Cards</button>
+            </a>
             <button
                 onClick={donate}
                 className="donate-button"
