@@ -1,0 +1,255 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+/// @title HappyVoteLeaderboardTopN
+/// @notice Голосование happy/sad с кулдауном 24 часа и масштабируемым top-N лидербордом.
+/// @dev Лидерборд хранит лишь topN участников, отсортированных по убыванию happyVoteCount.
+///     Для эффективности используется mapping indexOf (1-based), чтобы не искать по массиву.
+contract HappyVoteLeaderboardTopN {
+    /* ========== CONSTANTS ========== */
+    uint256 public constant COOLDOWN = 1 days;
+
+    /* ========== STATE ========== */
+    uint256 public happyVotes;
+    uint256 public sadVotes;
+
+    mapping(address => uint256) public lastVotedAt;
+    mapping(address => uint256) public happyVoteCount;
+
+    // Leaderboard (top N)
+    address[] private leaderboard; // sorted by descending happyVoteCount
+    mapping(address => uint256) private indexOf; // 1-based index in leaderboard; 0 == not present
+    uint256 public topN; // maximum length of leaderboard
+
+    // Owner for admin actions
+    address public owner;
+
+    /* ========== EVENTS ========== */
+    event Voted(address indexed user, bool isHappy);
+    event LeaderboardUpdated(address indexed by, address indexed account, uint256 newCount);
+    event LeaderboardMemberRemoved(address indexed account);
+    event LeaderboardCleared();
+    event TopNChanged(uint256 oldTopN, uint256 newTopN);
+    event OwnerTransferred(address indexed oldOwner, address indexed newOwner);
+
+    /* ========== MODIFIERS ========== */
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Not owner");
+        _;
+    }
+
+    /* ========== CONSTRUCTOR ========== */
+    /// @param _topN Максимальный размер лидерборда (например, 100)
+    constructor(uint256 _topN) {
+        require(_topN > 0, "topN must be > 0");
+        topN = _topN;
+        owner = msg.sender;
+    }
+
+    /* ========== OWNER ========== */
+    function transferOwnership(address newOwner) external onlyOwner {
+        require(newOwner != address(0), "zero address");
+        address old = owner;
+        owner = newOwner;
+        emit OwnerTransferred(old, newOwner);
+    }
+
+    /* ========== VOTING ========== */
+    function vote(bool isHappy) external {
+        require(
+            block.timestamp - lastVotedAt[msg.sender] >= COOLDOWN,
+            "You can only vote once every 24 hours"
+        );
+
+        lastVotedAt[msg.sender] = block.timestamp;
+
+        if (isHappy) {
+            happyVotes += 1;
+            happyVoteCount[msg.sender] += 1;
+            _updateLeaderboardOnHappyVote(msg.sender);
+        } else {
+            sadVotes += 1;
+        }
+
+        emit Voted(msg.sender, isHappy);
+    }
+
+    /* ========== VIEWS ========== */
+
+    function getVotes() external view returns (uint256 happy, uint256 sad) {
+        return (happyVotes, sadVotes);
+    }
+
+    function canVote(address user) external view returns (bool) {
+        return block.timestamp - lastVotedAt[user] >= COOLDOWN;
+    }
+
+    function timeUntilNextVote(address user) external view returns (uint256) {
+        uint256 lastTime = lastVotedAt[user];
+        if (block.timestamp - lastTime >= COOLDOWN) {
+            return 0;
+        }
+        return COOLDOWN - (block.timestamp - lastTime);
+    }
+
+    /// @notice Возвращает leaderboard (addresses and counts) в порядке от лучшего к худшему.
+    function getHappyLeaderboard()
+    external
+    view
+    returns (address[] memory addresses, uint256[] memory counts)
+    {
+        uint256 len = leaderboard.length;
+        addresses = new address[](len);
+        counts = new uint256[](len);
+        for (uint256 i = 0; i < len; i++) {
+            addresses[i] = leaderboard[i];
+            counts[i] = happyVoteCount[leaderboard[i]];
+        }
+    }
+
+    /* ========== INTERNAL LEADERBOARD LOGIC ========== */
+
+    /// @dev Основная логика: поддерживаем leaderboard длиной <= topN, отсортированную по убыванию.
+    ///      Используем indexOf (1-based) чтобы быстро узнать, есть ли участник в leaderboard.
+    function _updateLeaderboardOnHappyVote(address voter) internal {
+        uint256 voterCount = happyVoteCount[voter];
+        uint256 currentIndex = indexOf[voter]; // 1-based (0 = not present)
+
+        if (currentIndex > 0) {
+            // Уже в лидерборде: обновляем позицию — всплываем вверх при необходимости
+            uint256 idx = currentIndex - 1; // переводим в 0-based
+            // bubble up
+            while (idx > 0) {
+                address prevAddr = leaderboard[idx - 1];
+                if (voterCount <= happyVoteCount[prevAddr]) break;
+                // swap positions idx-1 and idx
+                leaderboard[idx - 1] = voter;
+                leaderboard[idx] = prevAddr;
+                // обновляем mapping-ы
+                indexOf[voter] = idx; // 1-based
+                indexOf[prevAddr] = idx + 1;
+                idx--;
+            }
+            // если idx == 0 и мы добрались до вершины, обновили mapping ранее в цикле,
+            // но в случае, когда не вошли в цикл (idx==currentIndex-1==0), mapping корректен.
+            emit LeaderboardUpdated(msg.sender, voter, voterCount);
+            return;
+        }
+
+        // Не в лидерборде:
+        if (leaderboard.length < topN) {
+            // есть место — добавить в конец и всплыть вверх
+            leaderboard.push(voter);
+            indexOf[voter] = leaderboard.length; // 1-based
+            uint256 idx = leaderboard.length - 1; // 0-based
+            // bubble up
+            while (idx > 0) {
+                address prevAddr = leaderboard[idx - 1];
+                if (voterCount <= happyVoteCount[prevAddr]) break;
+                leaderboard[idx - 1] = voter;
+                leaderboard[idx] = prevAddr;
+                indexOf[voter] = idx; // 1-based
+                indexOf[prevAddr] = idx + 1;
+                idx--;
+            }
+            emit LeaderboardUpdated(msg.sender, voter, voterCount);
+            return;
+        }
+
+        // leaderboard заполнен: проверим, больше ли новый счёт последнего
+        uint256 lastIndex = leaderboard.length - 1;
+        address lastAddr = leaderboard[lastIndex];
+        uint256 lastCount = happyVoteCount[lastAddr];
+
+        if (voterCount <= lastCount) {
+            // новый кандидат не попадает в topN
+            return;
+        }
+
+        // Заменяем последнего на нового участника
+        // Важная деталь: возможно новый участник уже имеет some votes (но не был в topN)
+        // Мы заменяем lastAddr на voter и снижаем mapping у lastAddr
+        indexOf[lastAddr] = 0; // removed
+        leaderboard[lastIndex] = voter;
+        indexOf[voter] = lastIndex + 1; // 1-based
+
+        // bubble up новый элемент с позиции lastIndex
+        uint256 idx2 = lastIndex;
+        while (idx2 > 0) {
+            address prevAddr = leaderboard[idx2 - 1];
+            if (voterCount <= happyVoteCount[prevAddr]) break;
+            leaderboard[idx2 - 1] = voter;
+            leaderboard[idx2] = prevAddr;
+            indexOf[voter] = idx2; // 1-based
+            indexOf[prevAddr] = idx2 + 1;
+            idx2--;
+        }
+
+        emit LeaderboardUpdated(msg.sender, voter, voterCount);
+    }
+
+    /* ========== ADMIN ACTIONS ========== */
+
+    /// @notice Удалить конкретного участника из лидерборда (не из happyVoteCount).
+    /// @dev Сдвигаем массив влево, обновляем indexOf. Сохраняем happyVoteCount, просто удаляем из топа.
+    function removeMember(address account) external onlyOwner {
+        uint256 idx1 = indexOf[account];
+        require(idx1 > 0, "not in leaderboard");
+        uint256 idx = idx1 - 1; // 0-based
+        uint256 len = leaderboard.length;
+
+        // Сдвиг элементов влево с позиции idx
+        for (uint256 i = idx; i + 1 < len; i++) {
+            leaderboard[i] = leaderboard[i + 1];
+            indexOf[leaderboard[i]] = i + 1; // обновить mapping 1-based
+        }
+        // удалить последний
+        leaderboard.pop();
+        indexOf[account] = 0;
+        emit LeaderboardMemberRemoved(account);
+    }
+
+    /// @notice Полностью очистить leaderboard (но не трогать happyVoteCount).
+    function clearLeaderboard() external onlyOwner {
+        // Обнуляем mapping indexOf для всех
+        for (uint256 i = 0; i < leaderboard.length; i++) {
+            indexOf[leaderboard[i]] = 0;
+        }
+        delete leaderboard;
+        emit LeaderboardCleared();
+    }
+
+    /// @notice Изменить topN. Если уменьшаем — обрезаем leaderboard до нового размера.
+    /// @dev Можно увеличить или уменьшить. При уменьшении удаляются худшие.
+    function setTopN(uint256 newTopN) external onlyOwner {
+        require(newTopN > 0, "topN must be > 0");
+        uint256 old = topN;
+        if (newTopN == old) return;
+        topN = newTopN;
+
+        // Если уменьшили — обрежем до нового размера
+        if (leaderboard.length > newTopN) {
+            // очистим indexOf для удаляемых
+            for (uint256 i = newTopN; i < leaderboard.length; i++) {
+                indexOf[leaderboard[i]] = 0;
+            }
+            // truncate
+            while (leaderboard.length > newTopN) {
+                leaderboard.pop();
+            }
+        }
+        emit TopNChanged(old, newTopN);
+    }
+
+    /* ========== HELPERS ========== */
+
+    /// @notice Возвращает индекс участника в leaderboard (1-based), 0 если не в leaderboard.
+    function getIndexOf(address account) external view returns (uint256) {
+        return indexOf[account];
+    }
+
+    /// @notice Возвращает текущий массив leaderboard (addresses only). Отдельно есть getHappyLeaderboard().
+    function getLeaderboardAddresses() external view returns (address[] memory) {
+        return leaderboard;
+    }
+}
