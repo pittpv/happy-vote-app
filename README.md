@@ -9,7 +9,6 @@ A standalone lightweight miniapp that lets users vote on how they feel — eithe
 - Leaderboard 
 - Users can only vote once per 24 hours (on-chain enforcement)
 - Built with **React** + **Ethers.js**
-- Smart contract deployable via **Remix**
 
 ## 🚀 Last updates 25-11-2025
 
