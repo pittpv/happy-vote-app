@@ -10,7 +10,7 @@ A standalone lightweight miniapp that lets users vote on how they feel — eithe
 - Built with **React** + **Ethers.js**
 - Smart contract deployable via **Remix**
 
-## 🚀 Last updates 22-10-2025
+## 🚀 Last updates 25-11-2025
 
 - **Dark/Light theme toggle** 🌙☀️
 - **WalletConnect** integration
