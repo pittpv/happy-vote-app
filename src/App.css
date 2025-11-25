@@ -28,12 +28,14 @@ body.dark-theme {
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+  margin-bottom: 40px;
+  margin-top: 40px;
 }
 
 .app-title {
   font-size: 2.25rem;
   font-weight: 700;
-  margin-bottom: 24px;
+  margin: 0;
   color: #111827;
   transition: color 0.3s ease;
 }
@@ -79,18 +81,95 @@ body.dark-theme .network-selector label {
 }
 
 .network-selector select {
-  padding: 8px 12px;
-  border-radius: 8px;
+  padding: 10px 16px;
+  border-radius: 10px;
   border: 1px solid #d1d5db;
   font-size: 0.95rem;
+  font-weight: 500;
   background-color: #fff;
   color: #111827;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 200px;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23374151' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
+}
+
+.network-selector select:hover {
+  border-color: #9ca3af;
+}
+
+.network-selector select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
 body.dark-theme .network-selector select {
   background-color: #1f2937;
   color: #f1f5f9;
   border-color: #374151;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2394a3b8' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+}
+
+body.dark-theme .network-selector select:hover {
+  border-color: #475569;
+}
+
+body.dark-theme .network-selector select:focus {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2);
+}
+
+/* Улучшенные стили для выпадающего списка в Chrome */
+.network-selector select option {
+  background-color: #ffffff;
+  color: #111827;
+  font-size: 0.95rem;
+  padding: 8px 12px;
+}
+
+body.dark-theme .network-selector select option {
+  background-color: #1f2937;
+  color: #f1f5f9;
+}
+
+/* Стили для выпадающего списка в Chrome */
+.network-selector select::-webkit-listbox {
+  border-radius: 10px;
+  border: 1px solid #d1d5db;
+  background-color: #ffffff;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+body.dark-theme .network-selector select::-webkit-listbox {
+  background-color: #1f2937;
+  border-color: #374151;
+}
+
+.network-selector select::-webkit-scrollbar {
+  width: 8px;
+}
+
+.network-selector select::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+.network-selector select::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+body.dark-theme .network-selector select::-webkit-scrollbar-track {
+  background: #334155;
+}
+
+body.dark-theme .network-selector select::-webkit-scrollbar-thumb {
+  background: #475569;
 }
 
 .network-selector-warning {
@@ -103,13 +182,14 @@ body.dark-theme .network-selector-warning {
   color: #fbbf24;
 }
 
-/* Wallet Buttons */
+/* Wallet Buttons - ИСПРАВЛЕНО ВЫРАВНИВАНИЕ */
 .wallet-connection {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 5px;
   margin-bottom: 24px;
   align-items: center;
+  width: 100%;
 }
 
 .wallet-connection h3 {
@@ -117,6 +197,8 @@ body.dark-theme .network-selector-warning {
   font-size: 1.1rem;
   color: #374151;
   transition: color 0.3s ease;
+  text-align: center;
+  width: 100%;
 }
 
 body.dark-theme .wallet-connection h3 {
@@ -128,6 +210,8 @@ body.dark-theme .wallet-connection h3 {
   gap: 12px;
   flex-wrap: wrap;
   justify-content: center;
+  align-items: center;
+  width: 100%;
 }
 
 .connect-button {
@@ -140,6 +224,7 @@ body.dark-theme .wallet-connection h3 {
   border-radius: 12px;
   cursor: pointer;
   transition: background-color 0.3s ease;
+  min-width: 160px;
 }
 
 .metamask-button {
@@ -163,6 +248,8 @@ body.dark-theme .wallet-connection h3 {
   color: #6b7280;
   margin-top: 8px;
   font-style: italic;
+  text-align: center;
+  width: 100%;
 }
 
 body.dark-theme .wallet-connect-note {
@@ -192,6 +279,8 @@ body.dark-theme .wallet-connect-note {
   font-size: 0.95rem;
   color: #4b5563;
   transition: color 0.3s ease;
+  text-align: center;
+  width: 100%;
 }
 
 body.dark-theme .wallet-info {
@@ -647,5 +736,104 @@ body.dark-theme .happiness-meter-labels {
   color: #94a3b8;
 }
 
+/* Mobile Responsive */
+@media (max-width: 640px) {
+  .app-container {
+    padding: 24px 12px;
+  }
 
+  .title-row {
+    gap: 8px;
+    margin-bottom: 40px;
+  }
 
+  .app-title {
+    font-size: 2rem;
+  }
+
+  .network-badge {
+    font-size: 0.75rem;
+    padding: 3px 8px;
+  }
+
+  .network-selector {
+    margin-bottom: 20px;
+    gap: 8px;
+  }
+
+  .network-selector select {
+    min-width: 180px;
+    padding: 10px 14px;
+    padding-right: 32px;
+    font-size: 0.9rem;
+  }
+
+  .wallet-buttons {
+    flex-direction: column;
+    width: 100%;
+    align-items: center;
+  }
+
+  .connect-button {
+    width: 100%;
+    max-width: 280px;
+  }
+
+  .vote-buttons {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .happy-button,
+  .sad-button {
+    width: 100%;
+    min-width: auto;
+  }
+
+  .mood-box {
+    padding: 20px 16px;
+  }
+
+  .leaderboard {
+    padding: 16px;
+  }
+
+  .theme-toggle {
+    top: 12px;
+    right: 12px;
+    padding: 6px;
+    font-size: 12px;
+  }
+
+  .notification {
+    bottom: 12px;
+    right: 12px;
+    left: 12px;
+    padding: 12px 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-title {
+    font-size: 1.7rem;
+  }
+
+  .network-selector select {
+    min-width: 160px;
+    font-size: 0.85rem;
+  }
+
+  .wallet-info {
+    font-size: 0.85rem;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .mood-box h3 {
+    font-size: 1.1rem;
+  }
+
+  .leaderboard-header h3 {
+    font-size: 1.1rem;
+  }
+}

@@ -60,9 +60,9 @@ function App() {
   const [isDarkTheme, setIsDarkTheme] = useState(false);
   const [walletType, setWalletType] = useState(null); // 'metamask' or 'walletconnect'
   const [selectedNetwork, setSelectedNetwork] = useState(() => {
-    if (typeof window === "undefined") return 'testnet';
+    if (typeof window === "undefined") return 'mainnet';
     const stored = localStorage.getItem('happy-vote-network');
-    return stored && NETWORKS[stored] ? stored : 'testnet';
+    return stored && NETWORKS[stored] ? stored : 'mainnet';
   });
 
   const mainnetAddressMissing = NETWORKS.mainnet.contractAddress === ZERO_ADDRESS;
@@ -99,7 +99,7 @@ function App() {
           : walletChainId || NETWORKS[selectedNetwork].chainId;
   const publicClient = usePublicClient({ chainId: publicClientChainId });
 
-  const selectedNetworkConfig = NETWORKS[selectedNetwork] || NETWORKS.testnet;
+  const selectedNetworkConfig = NETWORKS[selectedNetwork] || NETWORKS.mainnet;
   const displayNetworkConfig = NETWORKS[displayNetworkKey] || selectedNetworkConfig;
   const isWalletConnectLocked = walletType === 'walletconnect' && isConnected;
 
@@ -704,7 +704,7 @@ function App() {
         <div className="title-row">
           <h1 className="app-title">Make the world happier 🌍</h1>
           <span className={`network-badge ${displayNetworkKey === 'mainnet' ? 'badge-mainnet' : 'badge-testnet'}`}>
-            {displayNetworkConfig?.label || 'Testnet'}
+            {displayNetworkConfig?.label || 'Mainnet'}
           </span>
         </div>
 
