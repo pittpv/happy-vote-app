@@ -10,6 +10,24 @@ A standalone lightweight miniapp that lets users vote on how they feel — eithe
 - Built with **React** + **Ethers.js**
 - Smart contract deployable via **Remix**
 
+## 🚀 Last updates 22-10-2025
+
+- **Dark/Light theme toggle** 🌙☀️
+- **WalletConnect** integration
+
+## 🎨 Themes
+- **Light Theme**: Clean, modern design with light colors
+- **Dark Theme**: Dark background with high contrast for better night viewing
+- **Auto-detection**: Automatically detects system theme preference
+- **Persistent**: Theme choice is saved in localStorage
+
+## 🔗 Wallet Integration
+- **MetaMask**: Direct browser extension connection
+- **WalletConnect**: Mobile wallet support via QR code (300+ wallets supported)
+- **Network switching**: Automatic Monad Testnet detection and switching
+- **Multi-wallet support**: Choose between MetaMask and WalletConnect
+- **Mobile-friendly**: WalletConnect enables mobile wallet connections
+
 ## 🧱 Smart Contract
 
 Deploy `contracts/HappyVote.sol` via [Remix](https://remix.ethereum.org).

@@ -2,12 +2,22 @@ import React, { useState, useEffect, useCallback } from "react";
 import { ethers } from "ethers";
 import abi from "./abi.json";
 import "./App.css";
+import { openConnectModal } from "./walletProvider";
+import { useAccount, useDisconnect, useChainId, useSwitchChain, useWalletClient, usePublicClient } from 'wagmi';
 
 const contractAddress = "0x7fB4F5Fc2a6f2FAa86F5F37EAEE8A0db820ad9E0";
 const monadChainId = 10143;
 const monadChainHex = "0x279f";
 
 function App() {
+  // Wagmi hooks
+  const { address, isConnected } = useAccount();
+  const { disconnect } = useDisconnect();
+  const chainId = useChainId();
+  const { switchChain } = useSwitchChain();
+  const { data: walletClient } = useWalletClient();
+  const publicClient = usePublicClient({ chainId: monadChainId });
+  
   const [provider, setProvider] = useState(null);
   const [contract, setContract] = useState(null);
   const [account, setAccount] = useState(null);
@@ -23,6 +33,26 @@ function App() {
     donation: false,
   });
   const [message, setMessage] = useState(null);
+  const [isDarkTheme, setIsDarkTheme] = useState(false);
+  const [walletType, setWalletType] = useState(null); // 'metamask' or 'walletconnect'
+
+  // Theme management
+  const toggleTheme = useCallback(() => {
+    const newTheme = !isDarkTheme;
+    setIsDarkTheme(newTheme);
+    localStorage.setItem('theme', newTheme ? 'dark' : 'light');
+    document.body.classList.toggle('dark-theme', newTheme);
+  }, [isDarkTheme]);
+
+  // Initialize theme from localStorage
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const shouldUseDark = savedTheme === 'dark' || (!savedTheme && prefersDark);
+    
+    setIsDarkTheme(shouldUseDark);
+    document.body.classList.toggle('dark-theme', shouldUseDark);
+  }, []);
 
   const formatTime = useCallback((sec) => {
     const h = Math.floor(sec / 3600);
@@ -63,32 +93,76 @@ function App() {
     return newProvider;
   }, [checkNetwork, showMessage]);
 
-  const initContract = useCallback(async (provider, account) => {
-    try {
-      const signer = await provider.getSigner();
-      const contract = new ethers.Contract(contractAddress, abi, signer);
-      setContract(contract);
+  const fetchWalletConnectState = useCallback(async () => {
+    if (!publicClient || !account) return;
 
-      const [happy, sad] = await contract.getVotes();
+    try {
+      const [happy, sad] = await publicClient.readContract({
+        abi,
+        address: contractAddress,
+        functionName: "getVotes",
+      });
       setHappyVotes(Number(happy));
       setSadVotes(Number(sad));
 
-      const canVote = await contract.canVote(account);
-      setCanVote(canVote);
+      const walletCanVote = await publicClient.readContract({
+        abi,
+        address: contractAddress,
+        functionName: "canVote",
+        args: [account],
+      });
+      setCanVote(Boolean(walletCanVote));
 
-      if (!canVote) {
-        const seconds = await contract.timeUntilNextVote(account);
+      if (!walletCanVote) {
+        const seconds = await publicClient.readContract({
+          abi,
+          address: contractAddress,
+          functionName: "timeUntilNextVote",
+          args: [account],
+        });
         setTimeLeft(Number(seconds));
+      } else {
+        setTimeLeft(null);
       }
+    } catch (err) {
+      console.error("WalletConnect state sync failed:", err);
+      showMessage("Failed to refresh vote stats", "error");
+    }
+  }, [account, publicClient, showMessage]);
 
-      return contract;
+  const initContract = useCallback(async (provider, account) => {
+    try {
+      let signer;
+      if (walletType === 'walletconnect') {
+        await fetchWalletConnectState();
+        return null;
+      } else {
+        // Для MetaMask используем стандартный подход
+        signer = await provider.getSigner();
+        const contract = new ethers.Contract(contractAddress, abi, signer);
+        setContract(contract);
+
+        const [happy, sad] = await contract.getVotes();
+        setHappyVotes(Number(happy));
+        setSadVotes(Number(sad));
+
+        const canVote = await contract.canVote(account);
+        setCanVote(canVote);
+
+        if (!canVote) {
+          const seconds = await contract.timeUntilNextVote(account);
+          setTimeLeft(Number(seconds));
+        }
+
+        return contract;
+      }
     } catch (err) {
       console.error("Contract initialization failed:", err);
       showMessage("Failed to initialize contract", "error");
     }
-  }, [showMessage]);
+  }, [showMessage, walletType, fetchWalletConnectState]);
 
-  const connectWallet = useCallback(async () => {
+  const connectMetaMask = useCallback(async () => {
     if (!window.ethereum) {
       showMessage("Please install MetaMask", "error");
       return;
@@ -100,6 +174,7 @@ function App() {
       const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
       const selectedAccount = accounts[0];
       setAccount(selectedAccount);
+      setWalletType('metamask');
 
       const provider = await initProvider();
       if (!provider) return;
@@ -108,25 +183,47 @@ function App() {
       if (!isCorrect) return;
 
       await initContract(provider, selectedAccount);
-      showMessage("Wallet connected", "success");
+      showMessage("MetaMask connected", "success");
     } catch (err) {
-      showMessage("Failed to connect wallet", "error");
+      showMessage("Failed to connect MetaMask", "error");
       console.error(err);
     } finally {
       setLoading((prev) => ({ ...prev, wallet: false }));
     }
   }, [checkNetwork, initProvider, initContract, showMessage]);
 
+  const connectWalletConnect = useCallback(() => {
+    setWalletType('walletconnect');
+    openConnectModal();
+  }, []);
+
+  const connectWallet = useCallback((type) => {
+    if (type === 'metamask') {
+      connectMetaMask();
+    } else if (type === 'walletconnect') {
+      connectWalletConnect();
+    }
+  }, [connectMetaMask, connectWalletConnect]);
+
   const switchToMonadNetwork = useCallback(async () => {
     try {
       setLoading((prev) => ({ ...prev, network: true }));
 
-      await window.ethereum.request({
-        method: "wallet_switchEthereumChain",
-        params: [{ chainId: monadChainHex }],
-      });
+      if (walletType === 'walletconnect' && switchChain) {
+        // Для WalletConnect используем wagmi switchChain
+        await switchChain({ chainId: monadChainId });
+        setNetworkCorrect(true);
+        showMessage("Switched to Monad Testnet", "success");
+      } else if (window.ethereum) {
+        // Для MetaMask используем стандартный метод
+        await window.ethereum.request({
+          method: "wallet_switchEthereumChain",
+          params: [{ chainId: monadChainHex }],
+        });
+      }
     } catch (switchError) {
-      if (switchError.code === 4902) {
+      if (switchError.code === 4902 && window.ethereum) {
+        // Добавляем сеть если её нет
         await window.ethereum.request({
           method: "wallet_addEthereumChain",
           params: [{
@@ -143,14 +240,16 @@ function App() {
       }
     }
 
-    const updatedProvider = new ethers.BrowserProvider(window.ethereum);
-    setProvider(updatedProvider);
-    await checkNetwork(updatedProvider);
-    if (account) await initContract(updatedProvider, account);
-  }, [account, checkNetwork, initContract, showMessage]);
+    if (walletType === 'metamask') {
+      const updatedProvider = new ethers.BrowserProvider(window.ethereum);
+      setProvider(updatedProvider);
+      await checkNetwork(updatedProvider);
+      if (account) await initContract(updatedProvider, account);
+    }
+  }, [account, checkNetwork, initContract, showMessage, walletType, switchChain]);
 
   const vote = useCallback(async (isHappy) => {
-    if (!contract || !account) {
+    if (!account) {
       showMessage("Connect wallet first", "error");
       return;
     }
@@ -163,35 +262,63 @@ function App() {
     try {
       setLoading((prev) => ({ ...prev, voting: true }));
 
-      const tx = await contract.vote(isHappy);
-      await tx.wait();
+      if (walletType === 'walletconnect') {
+        if (!walletClient || !publicClient) {
+          showMessage("WalletConnect client not ready", "error");
+          return;
+        }
+        if (walletClient.chain?.id !== monadChainId) {
+          showMessage("Please switch to Monad Testnet", "error");
+          return;
+        }
 
-      const [happy, sad] = await contract.getVotes();
-      setHappyVotes(Number(happy));
-      setSadVotes(Number(sad));
-      setCanVote(false);
+        const txHash = await walletClient.writeContract({
+          abi,
+          address: contractAddress,
+          functionName: "vote",
+          args: [isHappy],
+          account: walletClient.account?.address ?? account,
+        });
 
-      const seconds = await contract.timeUntilNextVote(account);
-      setTimeLeft(Number(seconds));
+        await publicClient.waitForTransactionReceipt({ hash: txHash });
+        await fetchWalletConnectState();
+        showMessage("Vote successful!", "success");
+      } else if (contract) {
+        // Для MetaMask используем стандартный подход
+        const tx = await contract.vote(isHappy);
+        await tx.wait();
 
-      showMessage("Vote successful!", "success");
+        const [happy, sad] = await contract.getVotes();
+        setHappyVotes(Number(happy));
+        setSadVotes(Number(sad));
+        setCanVote(false);
+
+        const seconds = await contract.timeUntilNextVote(account);
+        setTimeLeft(Number(seconds));
+
+        showMessage("Vote successful!", "success");
+      }
     } catch (err) {
       showMessage("Voting failed", "error");
       console.error(err);
     } finally {
       setLoading((prev) => ({ ...prev, voting: false }));
     }
-  }, [contract, account, networkCorrect, showMessage]);
+  }, [contract, account, networkCorrect, showMessage, walletType, walletClient, publicClient, fetchWalletConnectState]);
 
   const disconnectWallet = useCallback(() => {
+    if (walletType === 'walletconnect' && isConnected) {
+      disconnect();
+    }
     setAccount(null);
     setProvider(null);
     setContract(null);
     setNetworkCorrect(null);
     setCanVote(false);
     setTimeLeft(null);
+    setWalletType(null);
     showMessage("Wallet disconnected", "info");
-  }, [showMessage]);
+  }, [showMessage, walletType, isConnected, disconnect]);
 
   const donate = useCallback(async () => {
     if (!provider || !account) {
@@ -216,9 +343,32 @@ function App() {
     }
   }, [provider, account, showMessage]);
 
+  // Обработка подключения через WalletConnect
+  useEffect(() => {
+    if (isConnected && address && walletType === 'walletconnect') {
+      setAccount(address);
+      // Проверяем правильность сети для WalletConnect
+      const isCorrectNetwork = chainId === monadChainId;
+      setNetworkCorrect(isCorrectNetwork);
+      
+      if (isCorrectNetwork) {
+        showMessage("WalletConnect connected", "success");
+      } else {
+        showMessage("Please switch to Monad Testnet", "error");
+      }
+    }
+  }, [isConnected, address, walletType, chainId, showMessage]);
+
+  useEffect(() => {
+    if (walletType !== 'walletconnect') return;
+    if (!isConnected || !account || !networkCorrect) return;
+
+    fetchWalletConnectState();
+  }, [walletType, isConnected, account, networkCorrect, fetchWalletConnectState]);
+
   // Автообновление сети при изменении
   useEffect(() => {
-    if (!window.ethereum) return;
+    if (!window.ethereum || walletType === 'walletconnect') return;
 
     const handleAccountsChanged = (accounts) => {
       if (accounts.length === 0) disconnectWallet();
@@ -242,7 +392,7 @@ function App() {
       window.ethereum.removeListener("accountsChanged", handleAccountsChanged);
       window.ethereum.removeListener("chainChanged", handleChainChanged);
     };
-  }, [provider, account, initContract, checkNetwork, disconnectWallet]);
+  }, [provider, account, initContract, checkNetwork, disconnectWallet, walletType]);
 
   useEffect(() => {
     if (provider) checkNetwork(provider);
@@ -264,6 +414,12 @@ function App() {
 
   return (
       <div className="app-container">
+        {/* Theme Toggle */}
+        <button onClick={toggleTheme} className="theme-toggle">
+          <span className="theme-icon">{isDarkTheme ? '🌙' : '☀️'}</span>
+          <span>{isDarkTheme ? 'Dark' : 'Light'}</span>
+        </button>
+
         {message && (
             <div className={`notification ${message.type}`}>
               {message.text}
@@ -287,9 +443,28 @@ function App() {
         <h1 className="app-title">Make the world happier 🌍</h1>
 
         {!account ? (
-            <button onClick={connectWallet} className="connect-button" disabled={loading.wallet}>
-              {loading.wallet ? "Connecting..." : "Connect Wallet"}
-            </button>
+            <div className="wallet-connection">
+              <h3>Choose your wallet:</h3>
+              <div className="wallet-buttons">
+                <button 
+                  onClick={() => connectWallet('metamask')} 
+                  className="connect-button metamask-button" 
+                  disabled={loading.wallet}
+                >
+                  {loading.wallet ? "Connecting..." : "🦊 MetaMask"}
+                </button>
+                <button 
+                  onClick={() => connectWallet('walletconnect')} 
+                  className="connect-button walletconnect-button" 
+                  disabled={loading.wallet}
+                >
+                  {loading.wallet ? "Connecting..." : "🔗 WalletConnect"}
+                </button>
+              </div>
+              <div className="wallet-connect-note">
+                WalletConnect supports 300+ wallets including mobile wallets
+              </div>
+            </div>
         ) : (
             <>
               <div className="wallet-info">
