@@ -41,4 +41,5 @@ Testnet `contracts/HappyVote.sol`
 Any questions, bug report or feedback:
 
 https://t.me/+DLsyG6ol3SFjM2Vk
+
 https://x.com/pittpv
