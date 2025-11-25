@@ -33,4 +33,12 @@ A standalone lightweight miniapp that lets users vote on how they feel — eithe
 ## 🧱 Smart Contract
 
 Mainnet `contracts/HappyVoteLeaderboard.sol`, [Verified](https://monadscan.com/address/0x782de66da70cf18e92da3527963e77207b8f7768#code)
+
 Testnet `contracts/HappyVote.sol` 
+
+## ✍️ Feedback
+
+Any questions, bug report or feedback:
+
+https://t.me/+DLsyG6ol3SFjM2Vk
+https://x.com/pittpv
