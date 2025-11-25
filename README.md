@@ -6,12 +6,14 @@ A standalone lightweight miniapp that lets users vote on how they feel — eithe
 
 - Two voting buttons: **"I'm Happy"** and **"I'm Sad"**
 - Real-time percentage counter showing happy/sad votes
+- Leaderboard 
 - Users can only vote once per 24 hours (on-chain enforcement)
 - Built with **React** + **Ethers.js**
 - Smart contract deployable via **Remix**
 
 ## 🚀 Last updates 25-11-2025
 
+- Monad **mainnet** & testnet support
 - **Dark/Light theme toggle** 🌙☀️
 - **WalletConnect** integration
 
@@ -30,4 +32,5 @@ A standalone lightweight miniapp that lets users vote on how they feel — eithe
 
 ## 🧱 Smart Contract
 
-Deploy `contracts/HappyVote.sol` via [Remix](https://remix.ethereum.org).
+Mainnet `contracts/HappyVoteLeaderboard.sol`, [Verified](https://monadscan.com/address/0x782de66da70cf18e92da3527963e77207b8f7768#code)
+Testnet `contracts/HappyVote.sol` 

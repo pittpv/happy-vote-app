@@ -26,14 +26,40 @@ const monadTestnet = {
   blockExplorers: {
     default: {
       name: 'Monad Explorer',
-      url: 'https://testnet.monadexplorer.com/',
+      url: 'https://testnet.monadvision.com',
     },
   },
   testnet: true,
 }
 
+const monadMainnet = {
+  id: 143,
+  name: 'Monad Mainnet',
+  network: 'monad-mainnet',
+  nativeCurrency: {
+    decimals: 18,
+    name: 'Monad',
+    symbol: 'MON',
+  },
+  rpcUrls: {
+    default: {
+      http: ['https://rpc.monad.xyz'],
+    },
+    public: {
+      http: ['https://rpc.monad.xyz'],
+    },
+  },
+  blockExplorers: {
+    default: {
+      name: 'Monad Explorer',
+      url: 'https://monadvision.com/',
+    },
+  },
+  testnet: false,
+}
+
 // Настройка сетей
-export const networks = [mainnet, arbitrum, monadTestnet]
+export const networks = [mainnet, arbitrum, monadTestnet, monadMainnet]
 
 // Метаданные приложения
 const metadata = {

@@ -24,4 +24,5 @@ yarn-error.log*
 
 .vercel
 
-.vercel
+.idea/
+contracts/HappyVoteLeaderboard.sol-desc
