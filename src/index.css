@@ -11,3 +11,149 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+/* WalletConnect Modal - только затемнение фона */
+/* Убираем лишние стили, оставляем только затемнение */
+
+/* Убираем темный фон с модального окна */
+w3m-modal,
+appkit-modal,
+[data-appkit-modal],
+.w3m-modal,
+.appkit-modal {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Мобильные стили для модального окна */
+@media (max-width: 640px) {
+  /* Центрируем модальное окно вертикально и горизонтально */
+  w3m-modal,
+  appkit-modal,
+  [data-appkit-modal],
+  .w3m-modal,
+  .appkit-modal {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    margin: 0 !important;
+    padding: 0 5px !important;
+    background: transparent !important;
+    z-index: 9999 !important;
+    transform: none !important;
+  }
+
+  /* Контент модального окна с отступами по 5px и центрированием */
+  w3m-modal > *,
+  appkit-modal > *,
+  [data-appkit-modal] > *,
+  .w3m-modal > *,
+  .appkit-modal > *,
+  w3m-modal-container,
+  appkit-modal-container,
+  [data-appkit-modal-container],
+  .w3m-modal-container,
+  .appkit-modal-container,
+  w3m-modal > div,
+  appkit-modal > div,
+  [data-appkit-modal] > div,
+  .w3m-modal > div,
+  .appkit-modal > div {
+    margin: 0 5px !important;
+    max-width: calc(100% - 10px) !important;
+    width: calc(100% - 10px) !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+    position: relative !important;
+    top: auto !important;
+    bottom: auto !important;
+    left: auto !important;
+    right: auto !important;
+    transform: none !important;
+    align-self: center !important;
+    margin-top: auto !important;
+    margin-bottom: auto !important;
+  }
+
+  /* Убираем позиционирование снизу для всех возможных контейнеров */
+  w3m-modal > *,
+  appkit-modal > *,
+  [data-appkit-modal] > *,
+  .w3m-modal > *,
+  .appkit-modal > *,
+  w3m-modal > *[style*="bottom"],
+  appkit-modal > *[style*="bottom"],
+  [data-appkit-modal] > *[style*="bottom"],
+  .w3m-modal > *[style*="bottom"],
+  .appkit-modal > *[style*="bottom"],
+  w3m-modal div,
+  appkit-modal div,
+  [data-appkit-modal] div,
+  .w3m-modal div,
+  .appkit-modal div {
+    bottom: auto !important;
+    top: auto !important;
+    position: relative !important;
+    transform: none !important;
+    margin-top: auto !important;
+    margin-bottom: auto !important;
+  }
+
+  /* Убираем темный фон со всех внутренних элементов */
+  w3m-modal *,
+  appkit-modal *,
+  [data-appkit-modal] *,
+  .w3m-modal *,
+  .appkit-modal * {
+    background: transparent !important;
+  }
+
+  /* Overlay только для легкого затемнения */
+  w3m-overlay,
+  appkit-overlay,
+  [data-appkit-overlay],
+  .w3m-overlay,
+  .appkit-overlay {
+    background: rgba(0, 0, 0, 0.4) !important;
+  }
+
+  /* Стили для возможных контейнеров внутри модального окна */
+  div[class*="w3m"],
+  div[class*="appkit"],
+  div[data-appkit] {
+    background: transparent !important;
+    position: relative !important;
+    top: auto !important;
+    bottom: auto !important;
+    transform: none !important;
+  }
+
+  /* Убираем темный фон с карточек и панелей */
+  [class*="card"],
+  [class*="panel"],
+  [class*="dialog"],
+  [class*="sheet"] {
+    background: transparent !important;
+    box-shadow: none !important;
+    position: relative !important;
+    top: auto !important;
+    bottom: auto !important;
+    transform: none !important;
+  }
+
+  /* Дополнительные стили для переопределения inline стилей */
+  [style*="bottom"] {
+    bottom: auto !important;
+    top: auto !important;
+  }
+
+  [style*="transform"] {
+    transform: none !important;
+  }
+}

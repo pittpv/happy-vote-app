@@ -59,6 +59,7 @@ function App() {
   const [message, setMessage] = useState(null);
   const [isDarkTheme, setIsDarkTheme] = useState(false);
   const [walletType, setWalletType] = useState(null); // 'metamask' or 'walletconnect'
+  const [isNetworkDropdownOpen, setIsNetworkDropdownOpen] = useState(false);
   const [selectedNetwork, setSelectedNetwork] = useState(() => {
     if (typeof window === "undefined") return 'mainnet';
     const stored = localStorage.getItem('happy-vote-network');
@@ -98,6 +99,7 @@ function App() {
           ? NETWORKS[activeNetworkKey].chainId
           : walletChainId || NETWORKS[selectedNetwork].chainId;
   const publicClient = usePublicClient({ chainId: publicClientChainId });
+  const selectedNetworkPublicClient = usePublicClient({ chainId: NETWORKS[selectedNetwork].chainId });
 
   const selectedNetworkConfig = NETWORKS[selectedNetwork] || NETWORKS.mainnet;
   const displayNetworkConfig = NETWORKS[displayNetworkKey] || selectedNetworkConfig;
@@ -107,6 +109,7 @@ function App() {
     if (typeof window === "undefined") return;
     localStorage.setItem('happy-vote-network', selectedNetwork);
   }, [selectedNetwork]);
+
 
   // Theme management
   const toggleTheme = useCallback(() => {
@@ -178,6 +181,50 @@ function App() {
     await checkNetwork(newProvider);
     return newProvider;
   }, [checkNetwork, showMessage]);
+
+  const fetchSelectedNetworkStats = useCallback(async () => {
+    if (!selectedNetworkPublicClient) return;
+
+    const config = selectedNetworkConfig;
+    if (!config || !config.contractAddress || config.contractAddress === ZERO_ADDRESS) {
+      setHappyVotes(0);
+      setSadVotes(0);
+      setLeaderboard([]);
+      return;
+    }
+
+    try {
+      const [happy, sad] = await selectedNetworkPublicClient.readContract({
+        abi: config.abi,
+        address: config.contractAddress,
+        functionName: "getVotes",
+      });
+      setHappyVotes(Number(happy));
+      setSadVotes(Number(sad));
+
+      if (config.hasLeaderboard) {
+        const [addresses, happyCounts] = await selectedNetworkPublicClient.readContract({
+          abi: config.abi,
+          address: config.contractAddress,
+          functionName: "getHappyLeaderboard",
+        });
+        const mapped =
+            addresses?.map((addr, index) => ({
+              address: addr,
+              happyVotes: Number(happyCounts[index]),
+            })) || [];
+        setLeaderboard(mapped.filter((row) => row.happyVotes > 0));
+      } else {
+        setLeaderboard([]);
+      }
+    } catch (err) {
+      console.error("Failed to fetch network stats", err);
+    }
+  }, [selectedNetworkPublicClient, selectedNetworkConfig]);
+
+  useEffect(() => {
+    fetchSelectedNetworkStats();
+  }, [fetchSelectedNetworkStats]);
 
   const fetchWalletConnectState = useCallback(
       async (networkKey) => {
@@ -574,37 +621,49 @@ function App() {
     }
   }, [provider, account, walletType, walletClient, publicClient, activeNetworkKey, selectedNetwork, showMessage]);
 
-  const handleNetworkChange = useCallback((event) => {
-    const value = event.target.value;
-    if (!NETWORKS[value]) return;
-    setSelectedNetwork(value);
+  const handleNetworkChange = useCallback((networkKey) => {
+    if (!NETWORKS[networkKey]) return;
+    setSelectedNetwork(networkKey);
+    setIsNetworkDropdownOpen(false);
 
     if (account) {
-      switchNetwork(value);
+      switchNetwork(networkKey);
     } else if (walletType === 'metamask' && provider) {
-      checkNetwork(provider, value);
+      checkNetwork(provider, networkKey);
     }
   }, [account, walletType, provider, checkNetwork, switchNetwork]);
 
+  const handleConnectWallet = useCallback(() => {
+    if (account) return;
+    openConnectModal();
+  }, [account]);
+
   // Обработка подключения через WalletConnect
   useEffect(() => {
-    if (isConnected && address && walletType === 'walletconnect') {
-      setAccount(address);
-
-      if (!activeNetworkKey) {
-        setNetworkCorrect(false);
-        showMessage("Unsupported network selected in wallet", "error");
-        return;
+    if (isConnected && address) {
+      // Если walletType еще не установлен, значит подключение через модальное окно WalletConnect
+      if (!walletType) {
+        setWalletType('walletconnect');
       }
 
-      const isCorrectNetwork = activeNetworkKey === selectedNetwork;
-      setNetworkCorrect(isCorrectNetwork);
+      if (walletType === 'walletconnect') {
+        setAccount(address);
 
-      if (isCorrectNetwork) {
-        showMessage(`WalletConnect connected to Monad ${NETWORKS[activeNetworkKey].label}`, "success");
-        fetchWalletConnectState(activeNetworkKey);
-      } else {
-        showMessage(`Please switch to Monad ${selectedNetworkConfig.label}`, "error");
+        if (!activeNetworkKey) {
+          setNetworkCorrect(false);
+          showMessage("Unsupported network selected in wallet", "error");
+          return;
+        }
+
+        const isCorrectNetwork = activeNetworkKey === selectedNetwork;
+        setNetworkCorrect(isCorrectNetwork);
+
+        if (isCorrectNetwork) {
+          showMessage(`WalletConnect connected to Monad ${NETWORKS[activeNetworkKey].label}`, "success");
+          fetchWalletConnectState(activeNetworkKey);
+        } else {
+          showMessage(`Please switch to Monad ${selectedNetworkConfig.label}`, "error");
+        }
       }
     }
   }, [isConnected, address, walletType, activeNetworkKey, selectedNetwork, selectedNetworkConfig.label, fetchWalletConnectState, showMessage]);
@@ -667,19 +726,212 @@ function App() {
     return () => clearInterval(interval);
   }, [timeLeft]);
 
+  // Закрытие выпадающего списка при клике вне его
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (isNetworkDropdownOpen && !event.target.closest('.network-dropdown-container')) {
+        setIsNetworkDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isNetworkDropdownOpen]);
+
+  // Центрирование модального окна WalletConnect на мобильных устройствах
+  useEffect(() => {
+    if (typeof window === 'undefined' || window.innerWidth > 640) return;
+
+    let animationFrameId = null;
+
+    const applyModalStyles = () => {
+      // Ищем все возможные селекторы модального окна
+      const modalSelectors = [
+        'w3m-modal',
+        'appkit-modal',
+        '[data-appkit-modal]',
+        '.w3m-modal',
+        '.appkit-modal',
+        'div[class*="w3m-modal"]',
+        'div[class*="appkit-modal"]'
+      ];
+
+      modalSelectors.forEach(selector => {
+        try {
+          const modals = document.querySelectorAll(selector);
+          modals.forEach(modal => {
+            if (modal && modal.offsetParent !== null) {
+              // Применяем стили к самому модальному окну
+              modal.style.setProperty('display', 'flex', 'important');
+              modal.style.setProperty('align-items', 'center', 'important');
+              modal.style.setProperty('justify-content', 'center', 'important');
+              modal.style.setProperty('position', 'fixed', 'important');
+              modal.style.setProperty('top', '0', 'important');
+              modal.style.setProperty('left', '0', 'important');
+              modal.style.setProperty('right', '0', 'important');
+              modal.style.setProperty('bottom', '0', 'important');
+              modal.style.setProperty('margin', '0', 'important');
+              modal.style.setProperty('padding', '0 5px', 'important');
+              modal.style.setProperty('background', 'transparent', 'important');
+              modal.style.setProperty('z-index', '9999', 'important');
+              modal.style.setProperty('transform', 'none', 'important');
+              modal.style.setProperty('align-self', 'center', 'important');
+
+              // Обрабатываем все дочерние элементы, особенно контейнеры
+              const allChildren = modal.querySelectorAll('*');
+              allChildren.forEach((child, index) => {
+                if (child && child.style) {
+                  // Убираем позиционирование снизу
+                  if (child.style.bottom || child.getAttribute('style')?.includes('bottom')) {
+                    child.style.setProperty('bottom', 'auto', 'important');
+                    child.style.setProperty('top', 'auto', 'important');
+                    child.style.setProperty('position', 'relative', 'important');
+                    child.style.setProperty('transform', 'none', 'important');
+                    child.style.setProperty('align-self', 'center', 'important');
+                  }
+                  
+                  // Убираем transform, который может сдвигать элемент
+                  const transform = child.style.transform || child.getAttribute('style')?.match(/transform:\s*([^;]+)/)?.[1];
+                  if (transform && (transform.includes('translateY') || transform.includes('translate'))) {
+                    child.style.setProperty('transform', 'none', 'important');
+                  }
+
+                  // Применяем отступы и ширину к первому уровню дочерних элементов
+                  if (child.parentElement === modal) {
+                    child.style.setProperty('margin', '0 5px', 'important');
+                    child.style.setProperty('max-width', 'calc(100% - 10px)', 'important');
+                    child.style.setProperty('width', 'calc(100% - 10px)', 'important');
+                    child.style.setProperty('align-self', 'center', 'important');
+                  }
+
+                  // Убираем темный фон
+                  if (child.style.background && child.style.background !== 'transparent') {
+                    child.style.setProperty('background', 'transparent', 'important');
+                  }
+                }
+              });
+            }
+          });
+        } catch (e) {
+          // Игнорируем ошибки для невалидных селекторов
+        }
+      });
+    };
+
+    const runWithAnimationFrame = () => {
+      applyModalStyles();
+      animationFrameId = requestAnimationFrame(runWithAnimationFrame);
+    };
+
+    // Применяем стили сразу
+    applyModalStyles();
+    
+    // Используем requestAnimationFrame для более частого обновления
+    animationFrameId = requestAnimationFrame(runWithAnimationFrame);
+    
+    // Также используем интервал как резерв
+    const interval = setInterval(applyModalStyles, 50);
+
+    // Отслеживаем изменения в DOM
+    const observer = new MutationObserver(() => {
+      applyModalStyles();
+    });
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['style', 'class']
+    });
+
+    return () => {
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+      clearInterval(interval);
+      observer.disconnect();
+    };
+  }, []);
+
   const totalVotes = happyVotes + sadVotes;
   const happyPercent = totalVotes ? Math.round((happyVotes / totalVotes) * 100) : 0;
   const sadPercent = totalVotes ? 100 - happyPercent : 0;
   const topLeaderboard = leaderboard.slice(0, 10);
   const extraLeaderboard = leaderboard.slice(10);
 
+  const NetworkIcon = ({ isMainnet }) => (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <g clipPath="url(#clip0_3845_96712)">
+          <path d="M9.99994 0C7.11219 0 0 7.112 0 9.99994C0 12.8879 7.11219 20 9.99994 20C12.8877 20 20 12.8877 20 9.99994C20 7.11212 12.8878 0 9.99994 0ZM8.44163 15.7183C7.22388 15.3864 3.94988 9.65938 4.28177 8.44163C4.61366 7.22381 10.3406 3.94987 11.5583 4.28175C12.7761 4.61358 16.0501 10.3406 15.7183 11.5584C15.3864 12.7761 9.65938 16.0501 8.44163 15.7183Z" fill={isMainnet ? "#836EF9" : "#9CA3AF"}></path>
+        </g>
+        <defs>
+          <clipPath id="clip0_3845_96712">
+            <rect width="20" height="20" fill="white"></rect>
+          </clipPath>
+        </defs>
+      </svg>
+  );
+
+  const WalletIcon = () => (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M16.6667 4.16667H15.8333V2.5C15.8333 1.57917 15.0875 0.833336 14.1667 0.833336H2.5C1.57917 0.833336 0.833336 1.57917 0.833336 2.5V17.5C0.833336 18.4208 1.57917 19.1667 2.5 19.1667H14.1667C15.0875 19.1667 15.8333 18.4208 15.8333 17.5V15.8333H16.6667C17.5875 15.8333 18.3333 15.0875 18.3333 14.1667V5.83333C18.3333 4.9125 17.5875 4.16667 16.6667 4.16667ZM14.1667 17.5H2.5V2.5H14.1667V4.16667H8.33334C7.4125 4.16667 6.66667 4.9125 6.66667 5.83333V14.1667C6.66667 15.0875 7.4125 15.8333 8.33334 15.8333H14.1667V17.5ZM16.6667 14.1667H8.33334V5.83333H16.6667V14.1667Z" fill="currentColor"/>
+      </svg>
+  );
+
   return (
       <div className="app-container">
-        {/* Theme Toggle */}
-        <button onClick={toggleTheme} className="theme-toggle">
-          <span className="theme-icon">{isDarkTheme ? '🌙' : '☀️'}</span>
-          <span>{isDarkTheme ? 'Dark' : 'Light'}</span>
-        </button>
+        <div className="floating-controls">
+          <div className="controls-row">
+            {/* Network Selector */}
+            <div className="network-dropdown-container">
+              <button
+                  className="network-selector-button"
+                  onClick={() => setIsNetworkDropdownOpen(!isNetworkDropdownOpen)}
+                  disabled={isWalletConnectLocked}
+              >
+                <NetworkIcon isMainnet={selectedNetwork === 'mainnet'} />
+                <span>Monad {selectedNetworkConfig.label}</span>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" className="dropdown-arrow">
+                  <path d="M6 9L1 4H11L6 9Z" fill="currentColor"/>
+                </svg>
+              </button>
+              {isNetworkDropdownOpen && (
+                  <div className="network-dropdown">
+                    {networkOptions.map((network) => (
+                        <button
+                            key={network.key}
+                            className={`network-dropdown-item ${selectedNetwork === network.key ? 'active' : ''}`}
+                            onClick={() => handleNetworkChange(network.key)}
+                        >
+                          <NetworkIcon isMainnet={network.key === 'mainnet'} />
+                          <span>Monad {network.label}</span>
+                        </button>
+                    ))}
+                  </div>
+              )}
+            </div>
+
+            {/* Connect Wallet Button */}
+            {account ? (
+                <div className="wallet-connected">
+                  <span className="wallet-address">{formatAddressShort(account)}</span>
+                  <button onClick={disconnectWallet} className="disconnect-button-small">Disconnect</button>
+                </div>
+            ) : (
+                <button
+                    className="connect-wallet-button"
+                    onClick={handleConnectWallet}
+                    disabled={loading.wallet}
+                >
+                  <WalletIcon />
+                  <span>Connect Wallet</span>
+                </button>
+            )}
+
+            {/* Theme Toggle */}
+            <button onClick={toggleTheme} className="theme-toggle">
+              <span className="theme-icon">{isDarkTheme ? '🌙' : '☀️'}</span>
+            </button>
+          </div>
+        </div>
 
         {message && (
             <div className={`notification ${message.type}`}>
@@ -708,137 +960,94 @@ function App() {
           </span>
         </div>
 
-        <div className="network-selector">
-          <label htmlFor="network-select">Preferred network</label>
-          <select
-              id="network-select"
-              value={selectedNetwork}
-              onChange={handleNetworkChange}
-              disabled={isWalletConnectLocked}
-          >
-            {networkOptions.map((network) => (
-                <option key={network.key} value={network.key}>
-                  Monad {network.label}
-                </option>
-            ))}
-          </select>
-          {selectedNetwork === 'mainnet' && mainnetAddressMissing && (
-              <p className="network-selector-warning">
-                Deploy the leaderboard contract and set REACT_APP_MAINNET_CONTRACT_ADDRESS.
-              </p>
+        <p className="app-description">
+          The app is designed to highlight the abundance of positivity around us and to track the overall mood of users across the Monad network.
+        </p>
+
+        <div className="vote-section">
+          <div className="vote-buttons">
+            <button
+                onClick={() => vote(true)}
+                disabled={!account || !canVote || loading.voting}
+                className="happy-button"
+            >
+              😊 I'm Happy
+            </button>
+            <button
+                onClick={() => vote(false)}
+                disabled={!account || !canVote || loading.voting}
+                className="sad-button"
+            >
+              😢 I'm Sad
+            </button>
+          </div>
+
+          {!account && (
+              <p className="connect-hint">Connect a wallet to vote and track your cooldown.</p>
+          )}
+
+          {account && !canVote && timeLeft !== null && (
+              <div className="vote-timer">
+                <p>You've already voted. Next vote in:</p>
+                <p className="timer">{formatTime(timeLeft)}</p>
+              </div>
+          )}
+
+          <div className="mood-box">
+            <h3>Current Mood</h3>
+            <div className="happiness-meter-container">
+              <div className="happiness-meter-happy" style={{ width: `${happyPercent}%` }}></div>
+              <div className="happiness-meter-sad" style={{ width: `${sadPercent}%` }}></div>
+            </div>
+            <div className="happiness-meter-labels">
+              <span>😊 Happy ({happyPercent}%)</span>
+              <span>😢 Sad ({sadPercent}%)</span>
+            </div>
+            <p>Total votes: <strong>{totalVotes}</strong></p>
+          </div>
+
+          {displayNetworkKey === 'mainnet' && (
+              <div className="leaderboard">
+                <div className="leaderboard-header">
+                  <h3>Happy Leaderboard</h3>
+                  <span>Top smiles on Monad {displayNetworkConfig?.label}</span>
+                </div>
+
+                {topLeaderboard.length === 0 ? (
+                    <p className="leaderboard-empty">Be the first happy voter on mainnet!</p>
+                ) : (
+                    <>
+                      <ol className="leaderboard-list">
+                        {topLeaderboard.map((row, index) => (
+                            <li key={`${row.address}-${index}`}>
+                              <span className="leaderboard-rank">#{index + 1}</span>
+                              <span className="leaderboard-address">{formatAddressShort(row.address)}</span>
+                              <span className="leaderboard-votes">{row.happyVotes} 😊</span>
+                            </li>
+                        ))}
+                      </ol>
+
+                      {extraLeaderboard.length > 0 && (
+                          <details className="leaderboard-extra">
+                            <summary>Show the rest ({extraLeaderboard.length})</summary>
+                            <div className="leaderboard-scroll">
+                              <ol start={11}>
+                                {extraLeaderboard.map((row, index) => (
+                                    <li key={`${row.address}-${index + 10}`}>
+                                      <span className="leaderboard-rank">#{index + 11}</span>
+                                      <span className="leaderboard-address">{formatAddressShort(row.address)}</span>
+                                      <span className="leaderboard-votes">{row.happyVotes} 😊</span>
+                                    </li>
+                                ))}
+                              </ol>
+                            </div>
+                          </details>
+                      )}
+                    </>
+                )}
+              </div>
           )}
         </div>
-
-        {!account ? (
-            <div className="wallet-connection">
-              <h3>Choose your wallet:</h3>
-              <div className="wallet-buttons">
-                <button
-                  onClick={() => connectWallet('metamask')}
-                  className="connect-button metamask-button"
-                  disabled={loading.wallet}
-                >
-                  {loading.wallet ? "Connecting..." : "🦊 MetaMask"}
-                </button>
-                <button
-                  onClick={() => connectWallet('walletconnect')}
-                  className="connect-button walletconnect-button"
-                  disabled={loading.wallet}
-                >
-                  {loading.wallet ? "Connecting..." : "🔗 WalletConnect"}
-                </button>
-              </div>
-              <div className="wallet-connect-note">
-                WalletConnect supports 300+ wallets including mobile wallets
-              </div>
-            </div>
-        ) : (
-            <>
-              <div className="wallet-info">
-                <strong>Connected:</strong> {formatAddressShort(account)}
-                <button onClick={disconnectWallet} className="disconnect-button">Disconnect</button>
-              </div>
-
-              <div className="vote-buttons">
-                <button
-                    onClick={() => vote(true)}
-                    disabled={!canVote || loading.voting}
-                    className="happy-button"
-                >
-                  😊 I'm Happy
-                </button>
-                <button
-                    onClick={() => vote(false)}
-                    disabled={!canVote || loading.voting}
-                    className="sad-button"
-                >
-                  😢 I'm Sad
-                </button>
-              </div>
-
-              {!canVote && timeLeft !== null && (
-                  <div className="vote-timer">
-                    <p>You've already voted. Next vote in:</p>
-                    <p className="timer">{formatTime(timeLeft)}</p>
-                  </div>
-              )}
-
-              <div className="mood-box">
-                <h3>Current Mood</h3>
-                <div className="happiness-meter-container">
-                  <div className="happiness-meter-happy" style={{ width: `${happyPercent}%` }}></div>
-                  <div className="happiness-meter-sad" style={{ width: `${sadPercent}%` }}></div>
-                </div>
-                <div className="happiness-meter-labels">
-                  <span>😊 Happy ({happyPercent}%)</span>
-                  <span>😢 Sad ({sadPercent}%)</span>
-                </div>
-                <p>Total votes: <strong>{totalVotes}</strong></p>
-              </div>
-
-              {displayNetworkKey === 'mainnet' && (
-                  <div className="leaderboard">
-                    <div className="leaderboard-header">
-                      <h3>Happy Leaderboard</h3>
-                      <span>Top smiles on Monad {displayNetworkConfig?.label}</span>
-                    </div>
-
-                    {topLeaderboard.length === 0 ? (
-                        <p className="leaderboard-empty">Be the first happy voter on mainnet!</p>
-                    ) : (
-                        <>
-                          <ol className="leaderboard-list">
-                            {topLeaderboard.map((row, index) => (
-                                <li key={`${row.address}-${index}`}>
-                                  <span className="leaderboard-rank">#{index + 1}</span>
-                                  <span className="leaderboard-address">{formatAddressShort(row.address)}</span>
-                                  <span className="leaderboard-votes">{row.happyVotes} 😊</span>
-                                </li>
-                            ))}
-                          </ol>
-
-                          {extraLeaderboard.length > 0 && (
-                              <details className="leaderboard-extra">
-                                <summary>Show the rest ({extraLeaderboard.length})</summary>
-                                <div className="leaderboard-scroll">
-                                  <ol start={11}>
-                                    {extraLeaderboard.map((row, index) => (
-                                        <li key={`${row.address}-${index + 10}`}>
-                                          <span className="leaderboard-rank">#{index + 11}</span>
-                                          <span className="leaderboard-address">{formatAddressShort(row.address)}</span>
-                                          <span className="leaderboard-votes">{row.happyVotes} 😊</span>
-                                        </li>
-                                    ))}
-                                  </ol>
-                                </div>
-                              </details>
-                          )}
-                        </>
-                    )}
-                  </div>
-              )}
-            </>
-        )}
 
         <hr className="divider" />
 

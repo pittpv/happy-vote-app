@@ -10,7 +10,23 @@ A standalone lightweight miniapp that lets users vote on how they feel — eithe
 - Users can only vote once per 24 hours (on-chain enforcement)
 - Built with **React** + **Ethers.js**
 
-## 🚀 Last updates 25-11-2025
+## 🚀 Updates
+
+### Latest update (December 2024)
+
+- **Network selector**: Choose between Monad Mainnet and Testnet with visual network badges
+- **Leaderboard**: Top 10 happy voters leaderboard on mainnet with scrollable list
+- **Read-only mode**: View voting results and leaderboard without wallet connection
+- **Redesigned controls**: Compact floating control panel in top-right corner with:
+  - Network selector with custom dropdown and network icons
+  - Unified Connect Wallet button (opens WalletConnect modal)
+  - Theme toggle button
+  - All buttons in consistent style with equal height
+- **Mobile optimization**: Fully responsive design with optimized spacing and compact controls
+- **App description**: Added descriptive text under the main title
+- **Improved UX**: Voting buttons and statistics visible without wallet connection; connection required only for voting/donating
+
+### Previous updates (25-11-2025)
 
 - Monad **mainnet** & testnet support
 - **Dark/Light theme toggle** 🌙☀️
