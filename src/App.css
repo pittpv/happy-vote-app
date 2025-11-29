@@ -2,7 +2,9 @@
 body {
   margin: 0;
   padding: 0;
-  font-family: 'Inter', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
   background-color: #f9fafb;
   color: #1f2937;
   transition: background-color 0.3s ease, color 0.3s ease;
@@ -61,6 +63,125 @@ body.dark-theme .app-title {
 .badge-mainnet {
   background-color: rgba(34, 197, 94, 0.15);
   color: #15803d;
+}
+
+.refund-badge-container {
+  position: relative;
+  display: inline-block;
+}
+
+.refund-badge {
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background-color: rgba(251, 191, 36, 0.15);
+  color: #d97706;
+  cursor: help;
+  display: inline-block;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+body.dark-theme .refund-badge {
+  background-color: rgba(251, 191, 36, 0.2);
+  color: #fbbf24;
+}
+
+.refund-badge:hover {
+  background-color: rgba(251, 191, 36, 0.25);
+}
+
+body.dark-theme .refund-badge:hover {
+  background-color: rgba(251, 191, 36, 0.3);
+}
+
+.refund-tooltip {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 8px;
+  padding: 10px 14px;
+  background-color: #1f2937;
+  color: #f9fafb;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 1000;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  max-width: 320px;
+  min-width: 200px;
+  white-space: normal;
+  text-align: left;
+}
+
+body.dark-theme .refund-tooltip {
+  background-color: #374151;
+  color: #f9fafb;
+}
+
+
+.refund-tooltip::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-bottom-color: #1f2937;
+}
+
+body.dark-theme .refund-tooltip::before {
+  border-bottom-color: #374151;
+}
+
+/* For touch devices (mobile, tablets) - regardless of screen size */
+@media (hover: none), (pointer: coarse) {
+  .refund-badge {
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .refund-tooltip {
+    max-width: calc(100vw - 32px);
+    min-width: 200px;
+    font-size: 0.7rem;
+    padding: 8px 12px;
+  }
+
+  /* Disable hover on touch devices */
+  .refund-badge-container:hover .refund-tooltip {
+    opacity: 0;
+  }
+
+  /* Show tooltip on touch devices when clicked */
+  .refund-badge-container.tooltip-visible .refund-tooltip {
+    opacity: 1;
+    transform: translateX(-50%) translateY(4px);
+    pointer-events: auto;
+  }
+}
+
+/* For devices that support hover (desktop) */
+@media (hover: hover) and (pointer: fine) {
+  .refund-badge-container:hover .refund-tooltip {
+    opacity: 1;
+    transform: translateX(-50%) translateY(4px);
+    pointer-events: auto;
+  }
+}
+
+/* Responsive adjustments for small screens */
+@media (max-width: 640px) {
+  .refund-tooltip {
+    max-width: calc(100vw - 32px);
+    min-width: 200px;
+    font-size: 0.7rem;
+    padding: 8px 12px;
+  }
 }
 
 .app-description {
@@ -192,7 +313,7 @@ body.dark-theme .wallet-summary-label {
 }
 
 .wallet-summary-address {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Courier New', monospace;
   font-weight: 600;
 }
 
@@ -576,7 +697,7 @@ body.dark-theme .leaderboard-list::-webkit-scrollbar-thumb:hover {
 
 .leaderboard-address {
   flex: 1;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Courier New', monospace;
   font-size: 0.9rem;
 }
 
@@ -677,6 +798,31 @@ body.dark-theme .link-button:hover {
 
 .donate-button:hover {
   background-color: #fcd34d;
+}
+
+/* Concept Evaluation Link */
+.concept-evaluation-link {
+  display: block;
+  text-align: center;
+  margin-top: 24px;
+  margin-bottom: 16px;
+  font-size: 0.75rem;
+  color: #6b7280;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.concept-evaluation-link:hover {
+  color: #4b5563;
+  text-decoration: underline;
+}
+
+body.dark-theme .concept-evaluation-link {
+  color: #94a3b8;
+}
+
+body.dark-theme .concept-evaluation-link:hover {
+  color: #cbd5e1;
 }
 
 /* Timer Highlight */
@@ -790,7 +936,7 @@ body.dark-theme .link-button:hover {
 .controls-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: nowrap;
 }
 
@@ -1074,7 +1220,7 @@ body.dark-theme .happiness-meter-labels {
 /* Mobile Responsive */
 @media (max-width: 640px) {
   .app-container {
-    padding: 20px 12px 24px;
+    padding: 40px 12px 24px;
   }
 
   .floating-controls {
@@ -1086,7 +1232,7 @@ body.dark-theme .happiness-meter-labels {
 
   .controls-row {
     flex-wrap: nowrap;
-    gap: 6px;
+    gap: 10px;
     justify-content: flex-end;
   }
 
@@ -1094,22 +1240,23 @@ body.dark-theme .happiness-meter-labels {
   .connect-wallet-button,
   .theme-toggle,
   .wallet-connected {
-    font-size: 11px;
-    padding: 6px 8px;
+    font-size: 12px;
+    padding: 8px;
     min-width: auto;
     flex-shrink: 0;
-    height: 32px;
+    height: 36px;
+    box-sizing: border-box;
+    font-family: inherit;
   }
 
-  .network-selector-button span,
-  .connect-wallet-button span {
+  .network-selector-button span {
     display: none;
   }
 
   .network-selector-button svg,
   .connect-wallet-button svg {
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
   }
 
   .network-dropdown {
@@ -1202,26 +1349,28 @@ body.dark-theme .happiness-meter-labels {
   }
 
   .controls-row {
-    gap: 4px;
+    gap: 10px;
   }
 
   .network-selector-button,
   .connect-wallet-button,
   .theme-toggle,
   .wallet-connected {
-    padding: 5px 6px;
-    font-size: 10px;
-    height: 30px;
+    padding: 7px;
+    font-size: 11px;
+    height: 36px;
+    box-sizing: border-box;
+    font-family: inherit;
   }
 
   .network-selector-button svg,
   .connect-wallet-button svg {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
   }
 
   .theme-icon {
-    font-size: 14px;
+    font-size: 16px;
   }
 
   .wallet-connected {

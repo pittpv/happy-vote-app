@@ -12,7 +12,21 @@ A standalone lightweight miniapp that lets users vote on how they feel — eithe
 
 ## 🚀 Updates
 
-### Latest update (December 2024)
+### Latest update (29-11-2025)
+
+- **Gas Refund Feature**: Optional gas fee reimbursement for voting transactions
+  - Automatically enabled/disabled by contract owner
+  - Visual badge indicator when refund is active
+  - Tooltip with detailed explanation
+  - Works for both Happy and Sad votes
+- **Optimized Gas Limits**: Improved transaction success rate for both MetaMask and WalletConnect
+- **Enhanced Transaction Handling**: 
+  - Better error handling for user-rejected transactions
+  - Prevents duplicate transactions on cancellation
+  - Improved logging for debugging
+- **Wallet Type Detection**: Fixed wallet type detection to correctly identify MetaMask vs WalletConnect connections
+
+### Previous update (27-11-2025)
 
 - **Network selector**: Choose between Monad Mainnet and Testnet with visual network badges
 - **Leaderboard**: Top 10 happy voters leaderboard on mainnet with scrollable list
@@ -47,7 +61,7 @@ A standalone lightweight miniapp that lets users vote on how they feel — eithe
 
 ## 🧱 Smart Contract
 
-Mainnet `contracts/HappyVoteLeaderboard.sol`, [Verified](https://monadscan.com/address/0x782de66da70cf18e92da3527963e77207b8f7768#code)
+Mainnet `contracts/HappyVoteLeaderboard.sol`, [Verified](https://monadscan.com/address/0xdFFEFD8eF040702A4657a98f189860169104257A#code)
 
 Testnet `contracts/HappyVote.sol` 
 

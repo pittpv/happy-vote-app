@@ -43,10 +43,10 @@ const monadMainnet = {
   },
   rpcUrls: {
     default: {
-      http: ['https://rpc.monad.xyz'],
+      http: ['https://rpc1.monad.xyz'],
     },
     public: {
-      http: ['https://rpc.monad.xyz'],
+      http: ['https://rpc1.monad.xyz'],
     },
   },
   blockExplorers: {
@@ -59,13 +59,13 @@ const monadMainnet = {
 }
 
 // Настройка сетей
-export const networks = [mainnet, arbitrum, monadTestnet, monadMainnet]
+export const networks = [monadMainnet, monadTestnet,]
 
 // Метаданные приложения
 const metadata = {
   name: 'Happy Vote App',
   description: 'Make the world happier with blockchain voting',
-  url: 'https://happy-vote-app.vercel.app',
+  url: 'https://www.happyvote.xyz/',
   icons: ['https://avatars.githubusercontent.com/u/179229932']
 }
 

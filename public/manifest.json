@@ -1,19 +1,19 @@
 {
   "name": "Happy World Vote",
-  "short_name": "HappyVote",
+  "short_name": "Happy Vote",
   "description": "A fun app to vote on your mood!",
-  "start_url": "https://happy-vote-app.vercel.app",
+  "start_url": "https://www.happyvote.xyz/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#00f0a1",
   "icons": [
     {
-      "src": "https://happy-vote-app.vercel.app/icon.png",
+      "src": "https://www.happyvote.xyz/icon.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "https://happy-vote-app.vercel.app/icon.png",
+      "src": "https://www.happyvote.xyz/icon.png",
       "sizes": "512x512",
       "type": "image/png"
     }

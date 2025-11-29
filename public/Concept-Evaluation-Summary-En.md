@@ -70,6 +70,39 @@ A future improvement could include:
 
 ---
 
+## Gas Refund Feature
+
+### **Optional Gas Fee Reimbursement**
+The contract includes an optional **"Refund-on-Vote"** feature that can be enabled or disabled by the contract owner:
+
+- **Purpose**: Reduces the cost barrier for users by partially reimbursing gas fees for voting transactions
+- **Mechanism**: 
+  - Measures actual gas consumed during vote execution
+  - Calculates refund amount based on gas used and current gas price
+  - Automatically transfers refund to voter's wallet (if enabled)
+  - Respects maximum refund limit per vote set by owner
+- **Owner Controls**:
+  - Enable/disable refund feature at any time
+  - Set maximum refund amount per vote
+  - Deposit/withdraw contract funds for refunds
+  - Pause/unpause contract if needed
+- **Transparency**: 
+  - All refund parameters are public and on-chain
+  - Users can check refund status before voting
+  - Refund statistics are publicly queryable
+- **Fairness**:
+  - Works identically for both Happy and Sad votes
+  - No discrimination between vote types
+  - Pull model for failed transfers ensures no funds are lost
+
+This feature is designed to:
+- Lower participation barriers
+- Encourage regular engagement
+- Be activated/deactivated based on community needs and contract funding
+- Maintain transparency and fairness
+
+---
+
 ## Conclusion
 
 Happy Vote MiniApp is a simple, elegant, and socially positive concept.  
@@ -78,8 +111,11 @@ Its mechanics:
 - Discourage abuse naturally
 - Maintain fairness through consistency
 - Avoid gas issues via strict leaderboard limits
+- Optionally reduce participation costs through gas refunds
 
 The contract-level ability to remove malicious actors serves as a controlled, transparent safety measure, ensuring that the leaderboard remains trustworthy without compromising decentralization principles.
+
+The optional gas refund feature further enhances accessibility while maintaining the non-financial nature of the core voting mechanism.
 
 Overall, the concept is solid, safe, socially beneficial, and technically well-thought-out.
 
