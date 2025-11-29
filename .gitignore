@@ -28,5 +28,4 @@ yarn-error.log*
 contracts/HappyVoteLeaderboard.sol-desc
 ACTIVATE_REFUND.md
 activate-refund.js
-contracts\HappyVoteLeaderboard.sol-desc
-contracts\HappyVoteLeaderboardRef.sol-desc
+contracts/HappyVoteLeaderboardRef.sol-desc

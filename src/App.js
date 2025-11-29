@@ -9,6 +9,101 @@ import { useAccount, useDisconnect, useChainId, useSwitchChain, useWalletClient 
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
+// Helper function to validate Ethereum address
+const isValidAddress = (address) => {
+  if (!address || typeof address !== 'string') return false;
+  return /^0x[a-fA-F0-9]{40}$/.test(address);
+};
+
+// Safe number conversion with overflow protection
+const safeNumber = (value) => {
+  try {
+    if (typeof value === 'bigint') {
+      // Check for safe integer range
+      // eslint-disable-next-line no-undef
+      if (value > BigInt(Number.MAX_SAFE_INTEGER)) {
+        console.warn("Value exceeds safe integer range:", value);
+        return Number.MAX_SAFE_INTEGER;
+      }
+      // eslint-disable-next-line no-undef
+      if (value < BigInt(Number.MIN_SAFE_INTEGER)) {
+        console.warn("Value below safe integer range:", value);
+        return Number.MIN_SAFE_INTEGER;
+      }
+      return Number(value);
+    }
+    const num = Number(value);
+    if (!isFinite(num) || isNaN(num)) {
+      return 0;
+    }
+    return Math.max(Number.MIN_SAFE_INTEGER, Math.min(num, Number.MAX_SAFE_INTEGER));
+  } catch (err) {
+    console.error("Error converting number:", err);
+    return 0;
+  }
+};
+
+// Get donation address from environment variable with validation
+const getDonationAddress = () => {
+  const address = process.env.REACT_APP_DONATION_ADDRESS;
+  if (!address) {
+    console.warn("REACT_APP_DONATION_ADDRESS not set, donation feature disabled");
+    return null;
+  }
+  if (!isValidAddress(address)) {
+    console.error("Invalid donation address format:", address);
+    return null;
+  }
+  return address;
+};
+
+// Whitelist of allowed RPC endpoints to prevent RPC endpoint substitution attacks
+const ALLOWED_RPC_DOMAINS = [
+  'rpc1.monad.xyz',
+  'rpc.monad.xyz',
+  'testnet-rpc.monad.xyz',
+];
+
+// Validate RPC URL to prevent endpoint substitution attacks
+const isValidRpcUrl = (url) => {
+  if (!url || typeof url !== 'string') return false;
+  try {
+    const urlObj = new URL(url);
+    // Only allow HTTPS
+    if (urlObj.protocol !== 'https:') return false;
+    // Check if domain is in whitelist
+    return ALLOWED_RPC_DOMAINS.some(domain => urlObj.hostname === domain || urlObj.hostname.endsWith('.' + domain));
+  } catch (err) {
+    console.error("Invalid RPC URL format:", url, err);
+    return false;
+  }
+};
+
+// Sanitize string to prevent XSS attacks
+const sanitizeString = (str) => {
+  if (str == null) return '';
+  const stringValue = String(str);
+  // Remove potentially dangerous characters and HTML tags
+  return stringValue
+    .replace(/[<>]/g, '') // Remove < and >
+    .replace(/javascript:/gi, '') // Remove javascript: protocol
+    .replace(/on\w+=/gi, '') // Remove event handlers
+    .trim()
+    .substring(0, 1000); // Limit length to prevent DoS
+};
+
+// Validate ABI structure to prevent malicious ABI injection
+const isValidAbi = (abi) => {
+  if (!abi || !Array.isArray(abi)) return false;
+  // Check that ABI is an array of objects with expected structure
+  return abi.every(item => {
+    if (typeof item !== 'object' || item === null) return false;
+    // Basic structure validation
+    return typeof item.type === 'string' && 
+           (item.type === 'function' || item.type === 'event' || item.type === 'constructor' || item.type === 'fallback' || item.type === 'receive');
+  });
+};
+
 const NETWORK_LIST = [
   {
     key: 'mainnet',
@@ -92,8 +187,16 @@ function App() {
   const [isNetworkDropdownOpen, setIsNetworkDropdownOpen] = useState(false);
   const [selectedNetwork, setSelectedNetwork] = useState(() => {
     if (typeof window === "undefined") return 'mainnet';
-    const stored = localStorage.getItem('happy-vote-network');
-    return stored && NETWORKS[stored] ? stored : 'mainnet';
+    try {
+      const stored = localStorage.getItem('happy-vote-network');
+      // Validate stored network value to prevent XSS/injection
+      if (stored && typeof stored === 'string' && NETWORKS[stored]) {
+        return stored;
+      }
+    } catch (err) {
+      console.warn("Error reading network from localStorage:", err);
+    }
+    return 'mainnet';
   });
 
   const publicClientCacheRef = useRef({});
@@ -107,14 +210,31 @@ function App() {
       return null;
     }
 
-    if (!publicClientCacheRef.current[networkKey]) {
-      const chainConfig = NETWORK_CHAIN_CONFIG[networkKey];
-      publicClientCacheRef.current[networkKey] = createPublicClient({
-        chain: chainConfig,
-        transport: http(config.rpcUrls[0]),
-      });
+    // Validate RPC URL to prevent endpoint substitution attacks
+    const rpcUrl = config.rpcUrls[0];
+    if (!isValidRpcUrl(rpcUrl)) {
+      console.error(`Invalid or unauthorized RPC URL for network ${networkKey}:`, rpcUrl);
+      return null;
     }
 
+    if (!publicClientCacheRef.current[networkKey]) {
+      const chainConfig = NETWORK_CHAIN_CONFIG[networkKey];
+      // Validate chain config RPC URLs as well
+      if (chainConfig?.rpcUrls?.default?.http) {
+        const validatedUrls = chainConfig.rpcUrls.default.http.filter(url => isValidRpcUrl(url));
+        if (validatedUrls.length === 0) {
+          console.error(`No valid RPC URLs for network ${networkKey}`);
+          return null;
+        }
+        chainConfig.rpcUrls.default.http = validatedUrls;
+        chainConfig.rpcUrls.public.http = validatedUrls;
+      }
+      
+      publicClientCacheRef.current[networkKey] = createPublicClient({
+        chain: chainConfig,
+        transport: http(rpcUrl),
+      });
+    }
     return publicClientCacheRef.current[networkKey];
   }, []);
 
@@ -171,12 +291,21 @@ function App() {
 
   // Initialize theme from localStorage
   useEffect(() => {
-    const savedTheme = localStorage.getItem('theme');
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const shouldUseDark = savedTheme === 'dark' || (!savedTheme && prefersDark);
-
-    setIsDarkTheme(shouldUseDark);
-    document.body.classList.toggle('dark-theme', shouldUseDark);
+    try {
+      const savedTheme = localStorage.getItem('theme');
+      // Validate theme value to prevent XSS/injection
+      const validTheme = savedTheme === 'dark' || savedTheme === 'light' ? savedTheme : null;
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const shouldUseDark = validTheme === 'dark' || (!validTheme && prefersDark);
+      setIsDarkTheme(shouldUseDark);
+      document.body.classList.toggle('dark-theme', shouldUseDark);
+    } catch (err) {
+      console.warn("Error reading theme from localStorage:", err);
+      // Fallback to system preference
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      setIsDarkTheme(prefersDark);
+      document.body.classList.toggle('dark-theme', prefersDark);
+    }
   }, []);
 
   const formatTime = useCallback((sec) => {
@@ -192,9 +321,19 @@ function App() {
   }, []);
 
   const showMessage = useCallback((text, type = "info", duration = 5000) => {
-    setMessage({ text, type });
-    if (duration > 0) {
-      setTimeout(() => setMessage(null), duration);
+    // Sanitize message text to prevent XSS attacks
+    const sanitizedText = sanitizeString(text);
+    // Validate message type to prevent injection
+    const validTypes = ['info', 'success', 'error', 'warning'];
+    const safeType = validTypes.includes(type) ? type : 'info';
+    // Validate and limit duration to prevent DoS
+    const safeDuration = Math.max(0, Math.min(Number(duration) || 5000, 30000)); // Max 30 seconds
+    
+    setMessage({ text: sanitizedText, type: safeType });
+    if (safeDuration > 0) {
+      const timeoutId = setTimeout(() => setMessage(null), safeDuration);
+      // Store timeout ID for potential cleanup (though React handles this)
+      return () => clearTimeout(timeoutId);
     }
   }, []);
 
@@ -241,8 +380,26 @@ function App() {
       return;
     }
 
+    // Validate contract address
+    if (!isValidAddress(config.contractAddress)) {
+      console.error("Invalid contract address:", config.contractAddress);
+      setHappyVotes(0);
+      setSadVotes(0);
+      setLeaderboard([]);
+      return;
+    }
+
     const client = getNetworkClient(config.key);
     if (!client) return;
+
+    // Validate ABI before use to prevent malicious ABI injection
+    if (!isValidAbi(config.abi)) {
+      console.error("Invalid ABI structure for network:", config.key);
+      setHappyVotes(0);
+      setSadVotes(0);
+      setLeaderboard([]);
+      return;
+    }
 
     try {
       const [happy, sad] = await client.readContract({
@@ -250,8 +407,9 @@ function App() {
         address: config.contractAddress,
         functionName: "getVotes",
       });
-      setHappyVotes(Number(happy));
-      setSadVotes(Number(sad));
+      
+      setHappyVotes(safeNumber(happy));
+      setSadVotes(safeNumber(sad));
 
       // Check if refund is enabled
       try {
@@ -284,12 +442,18 @@ function App() {
           address: config.contractAddress,
           functionName: "getHappyLeaderboard",
         });
+        // Validate and filter addresses
         const mapped =
-            addresses?.map((addr, index) => ({
-              address: addr,
-              happyVotes: Number(happyCounts[index]),
-            })) || [];
-        setLeaderboard(mapped.filter((row) => row.happyVotes > 0));
+            addresses?.map((addr, index) => {
+              // Validate address format
+              const validAddr = isValidAddress(addr) ? addr : null;
+              return {
+                address: validAddr,
+                happyVotes: safeNumber(happyCounts[index]),
+              };
+            })
+            .filter((row) => row.address && row.happyVotes > 0) || [];
+        setLeaderboard(mapped);
       } else {
         setLeaderboard([]);
       }
@@ -308,9 +472,20 @@ function App() {
     if (!tooltipVisible) return;
 
     const handleClickOutside = (event) => {
-      const container = document.querySelector('.refund-badge-container');
-      if (container && !container.contains(event.target)) {
-        setTooltipVisible(false);
+      // Validate event target
+      if (!event || !event.target) return;
+      
+      try {
+        const container = document.querySelector('.refund-badge-container');
+        // Validate DOM element before use
+        if (container && typeof container === 'object' && container.nodeType === 1) {
+          if (container.contains && container.contains(event.target)) {
+            return; // Click inside container
+          }
+          setTooltipVisible(false);
+        }
+      } catch (err) {
+        console.warn("Error in handleClickOutside:", err);
       }
     };
 
@@ -351,6 +526,28 @@ function App() {
         const client = getNetworkClient(networkKey);
         if (!client) return;
 
+        // Validate contract address before use
+        if (!isValidAddress(config.contractAddress)) {
+          console.error("Invalid contract address in fetchWalletConnectState:", config.contractAddress);
+          setLeaderboard([]);
+          setHappyVotes(0);
+          setSadVotes(0);
+          setCanVote(false);
+          setTimeLeft(null);
+          return;
+        }
+
+        // Validate ABI before use to prevent malicious ABI injection
+        if (!isValidAbi(config.abi)) {
+          console.error("Invalid ABI structure in fetchWalletConnectState for network:", networkKey);
+          setLeaderboard([]);
+          setHappyVotes(0);
+          setSadVotes(0);
+          setCanVote(false);
+          setTimeLeft(null);
+          return;
+        }
+
         try {
           const baseArgs = {
             abi: config.abi,
@@ -361,8 +558,8 @@ function App() {
             ...baseArgs,
             functionName: "getVotes",
           });
-          setHappyVotes(Number(happy));
-          setSadVotes(Number(sad));
+          setHappyVotes(safeNumber(happy));
+          setSadVotes(safeNumber(sad));
 
           // Check if refund is enabled
           try {
@@ -401,7 +598,7 @@ function App() {
               functionName: "timeUntilNextVote",
               args: [account],
             });
-            setTimeLeft(Number(seconds));
+            setTimeLeft(safeNumber(seconds));
           } else {
             setTimeLeft(null);
           }
@@ -411,12 +608,17 @@ function App() {
               ...baseArgs,
               functionName: "getHappyLeaderboard",
             });
+            // Validate and filter addresses
             const mapped =
-                addresses?.map((addr, index) => ({
-                  address: addr,
-                  happyVotes: Number(happyCounts[index]),
-                })) || [];
-            setLeaderboard(mapped.filter((row) => row.happyVotes > 0));
+                addresses?.map((addr, index) => {
+                  const validAddr = isValidAddress(addr) ? addr : null;
+                  return {
+                    address: validAddr,
+                    happyVotes: safeNumber(happyCounts[index]),
+                  };
+                })
+                .filter((row) => row.address && row.happyVotes > 0) || [];
+            setLeaderboard(mapped);
           } else {
             setLeaderboard([]);
           }
@@ -453,6 +655,19 @@ function App() {
         return null;
       } else {
         // Для MetaMask используем стандартный подход
+        // Validate ABI before creating contract to prevent malicious ABI injection
+        if (!isValidAbi(config.abi)) {
+          console.error("Invalid ABI structure in initContract for network:", networkKey);
+          setContract(null);
+          setHappyVotes(0);
+          setSadVotes(0);
+          setLeaderboard([]);
+          setCanVote(false);
+          setTimeLeft(null);
+          showMessage("Invalid contract ABI for this network", "error");
+          return;
+        }
+        
         const signer = await provider.getSigner();
         const contract = new ethers.Contract(config.contractAddress, config.abi, signer);
         setContract(contract);
@@ -487,7 +702,7 @@ function App() {
 
         if (!canVote) {
           const seconds = await contract.timeUntilNextVote(account);
-          setTimeLeft(Number(seconds));
+          setTimeLeft(safeNumber(seconds));
         } else {
           setTimeLeft(null);
         }
@@ -495,11 +710,17 @@ function App() {
         if (config.hasLeaderboard) {
           try {
             const [addresses, happyCounts] = await contract.getHappyLeaderboard();
-            const mapped = addresses.map((addr, index) => ({
-              address: addr,
-              happyVotes: Number(happyCounts[index]),
-            }));
-            setLeaderboard(mapped.filter((row) => row.happyVotes > 0));
+            // Validate and filter addresses
+            const mapped = addresses
+              .map((addr, index) => {
+                const validAddr = isValidAddress(addr) ? addr : null;
+                return {
+                  address: validAddr,
+                  happyVotes: safeNumber(happyCounts[index]),
+                };
+              })
+              .filter((row) => row.address && row.happyVotes > 0);
+            setLeaderboard(mapped);
           } catch (leaderboardError) {
             console.warn("Failed to fetch leaderboard", leaderboardError);
             setLeaderboard([]);
@@ -666,7 +887,7 @@ function App() {
 
     const networkKey = walletType === 'walletconnect' ? activeNetworkKey : selectedNetwork;
     console.log("🎯 [Vote] Network key:", networkKey, "walletType:", walletType);
-    
+
     if (!networkKey) {
       console.error("❌ [Vote] No network key");
       showMessage("Unsupported network", "error");
@@ -677,6 +898,20 @@ function App() {
     if (!targetConfig || targetConfig.contractAddress === ZERO_ADDRESS) {
       console.error("❌ [Vote] Contract address missing");
       showMessage("Contract address missing for this network", "error");
+      return;
+    }
+
+    // Validate contract address format
+    if (!isValidAddress(targetConfig.contractAddress)) {
+      console.error("❌ [Vote] Invalid contract address format:", targetConfig.contractAddress);
+      showMessage("Invalid contract address for this network", "error");
+      return;
+    }
+
+    // Validate account address
+    if (!isValidAddress(account)) {
+      console.error("❌ [Vote] Invalid account address:", account);
+      showMessage("Invalid account address", "error");
       return;
     }
 
@@ -706,7 +941,22 @@ function App() {
         // Для WalletConnect также нужно увеличить GasLimit в 1.5 раза
         const voteType = isHappy ? "Happy" : "Sad";
         console.log(`📊 [WalletConnect Vote] Estimating gas for ${voteType} vote...`);
-        
+
+        // Validate addresses before gas estimation
+        const walletAccount = walletClient.account?.address ?? account;
+        if (!isValidAddress(walletAccount)) {
+          console.error("❌ [WalletConnect Vote] Invalid wallet account address:", walletAccount);
+          showMessage("Invalid wallet account address", "error");
+          return;
+        }
+
+        // Validate ABI before use to prevent malicious ABI injection
+        if (!isValidAbi(targetConfig.abi)) {
+          console.error("❌ [WalletConnect Vote] Invalid ABI structure for network:", networkKey);
+          showMessage("Invalid contract ABI for this network", "error");
+          return;
+        }
+
         try {
           // Получаем оценку газа
           const estimatedGas = await client.estimateContractGas({
@@ -714,7 +964,7 @@ function App() {
             address: targetConfig.contractAddress,
             functionName: "vote",
             args: [isHappy],
-            account: walletClient.account?.address ?? account,
+            account: walletAccount,
           });
 
           // Увеличиваем GasLimit: 1.5x для Happy, 1.7x для Sad
@@ -751,7 +1001,7 @@ function App() {
           } catch (writeErr) {
             console.error(`❌ [WalletConnect Vote] Error sending ${voteType} vote transaction:`, writeErr);
             // Проверяем, не отменил ли пользователь транзакцию
-            if (writeErr?.message?.includes("user rejected") || 
+            if (writeErr?.message?.includes("user rejected") ||
                 writeErr?.message?.includes("User denied") ||
                 writeErr?.message?.includes("User rejected") ||
                 writeErr?.code === 4001 ||
@@ -770,22 +1020,22 @@ function App() {
             console.error(`❌ [WalletConnect Vote] Error waiting for ${voteType} vote transaction:`, waitErr);
             throw waitErr;
           }
-          
+
           await fetchWalletConnectState(networkKey);
           showMessage("Vote successful!", "success");
         } catch (gasErr) {
           const voteType = isHappy ? "Happy" : "Sad";
           console.error(`❌ [WalletConnect Vote] Error for ${voteType} vote:`, gasErr);
-          
+
           // Проверяем, не отменил ли пользователь транзакцию
-          if (gasErr?.message?.includes("user rejected") || 
+          if (gasErr?.message?.includes("user rejected") ||
               gasErr?.message?.includes("User denied") ||
               gasErr?.message?.includes("User rejected") ||
               gasErr?.code === 4001) {
             console.log(`🚫 [WalletConnect Vote] ${voteType} vote transaction rejected by user`);
             throw gasErr; // Пробрасываем ошибку, чтобы не пытаться отправлять повторно
           }
-          
+
           // Если это не отмена пользователем, пробрасываем ошибку дальше
           throw gasErr;
         }
@@ -812,21 +1062,28 @@ function App() {
           return;
         }
 
+        // Validate contract and ABI before use
+        if (!contract || !contract.vote || typeof contract.vote.populateTransaction !== 'function') {
+          console.error("❌ [MetaMask Vote] Contract or vote function not available");
+          showMessage("Contract not properly initialized", "error");
+          return;
+        }
+
         try {
           // Получаем оценку газа от RPC
           const voteType = isHappy ? "Happy" : "Sad";
           console.log(`📊 [MetaMask Vote] Estimating gas for ${voteType} vote...`);
           const populatedTx = await contract.vote.populateTransaction(isHappy);
           const estimatedGas = await provider.estimateGas(populatedTx);
-          
-          // Увеличиваем GasLimit: 1.5x для Happy, 2.5x для Sad
-          const multiplier = isHappy ? 150n : 250n; // 1.5x для Happy, 2.5x для Sad
+
+          // Увеличиваем GasLimit: 1.5x для Happy, 1.7x для Sad
+          const multiplier = isHappy ? 150n : 170n; // 1.5x для Happy, 1.7x для Sad
           const increasedGasLimit = (estimatedGas * multiplier) / 100n;
 
           console.log(`✅ [MetaMask Vote] Gas estimation for ${voteType} vote:`, {
             estimated: estimatedGas.toString(),
             increased: increasedGasLimit.toString(),
-            multiplier: isHappy ? "1.5x" : "2.5x",
+            multiplier: isHappy ? "1.5x" : "1.7x",
             voteType
           });
 
@@ -845,7 +1102,7 @@ function App() {
             });
           } catch (sendErr) {
             // Проверяем, не отменил ли пользователь транзакцию
-            if (sendErr?.message?.includes("user rejected") || 
+            if (sendErr?.message?.includes("user rejected") ||
                 sendErr?.message?.includes("User denied") ||
                 sendErr?.message?.includes("User rejected") ||
                 sendErr?.code === 4001 ||
@@ -882,7 +1139,7 @@ function App() {
             receipt = await tx.wait();
           } catch (waitErr) {
             // Проверяем, не отменил ли пользователь транзакцию во время ожидания
-            if (waitErr?.message?.includes("user rejected") || 
+            if (waitErr?.message?.includes("user rejected") ||
                 waitErr?.message?.includes("User denied") ||
                 waitErr?.message?.includes("User rejected") ||
                 waitErr?.code === 4001 ||
@@ -907,20 +1164,26 @@ function App() {
           }
 
           const [happy, sad] = await contract.getVotes();
-          setHappyVotes(Number(happy));
-          setSadVotes(Number(sad));
+          setHappyVotes(safeNumber(happy));
+          setSadVotes(safeNumber(sad));
           setCanVote(false);
 
           const seconds = await contract.timeUntilNextVote(account);
-          setTimeLeft(Number(seconds));
+          setTimeLeft(safeNumber(seconds));
 
           if (targetConfig.hasLeaderboard && typeof contract.getHappyLeaderboard === "function") {
             const [addresses, happyCounts] = await contract.getHappyLeaderboard();
-            const mapped = addresses.map((addr, index) => ({
-              address: addr,
-              happyVotes: Number(happyCounts[index]),
-            }));
-            setLeaderboard(mapped.filter((row) => row.happyVotes > 0));
+            // Validate and filter addresses
+            const mapped = addresses
+              .map((addr, index) => {
+                const validAddr = isValidAddress(addr) ? addr : null;
+                return {
+                  address: validAddr,
+                  happyVotes: safeNumber(happyCounts[index]),
+                };
+              })
+              .filter((row) => row.address && row.happyVotes > 0);
+            setLeaderboard(mapped);
           }
 
           showMessage("Vote successful!", "success");
@@ -988,11 +1251,39 @@ function App() {
       return;
     }
 
+    // Validate donation address
+    const donationAddress = getDonationAddress();
+    if (!donationAddress) {
+      showMessage("Donation address not configured", "error");
+      return;
+    }
+
+    // Validate account address
+    if (!isValidAddress(account)) {
+      showMessage("Invalid account address", "error");
+      return;
+    }
+
     const networkKey = walletType === 'walletconnect' ? activeNetworkKey : selectedNetwork;
     const targetConfig = networkKey ? NETWORKS[networkKey] : null;
 
     try {
       setLoading((prev) => ({ ...prev, donation: true }));
+
+      // Validate donation amount (10 MON)
+      const donationAmount = "10";
+      let donationValue;
+      try {
+        donationValue = ethers.parseEther(donationAmount);
+        // Additional safety check: ensure value is reasonable
+        if (donationValue <= 0n || donationValue > ethers.parseEther("1000")) {
+          throw new Error("Invalid donation amount");
+        }
+      } catch (parseErr) {
+        showMessage("Invalid donation amount", "error");
+        console.error("Donation amount parsing error:", parseErr);
+        return;
+      }
 
       if (walletType === 'walletconnect') {
         if (!walletClient) {
@@ -1014,10 +1305,17 @@ function App() {
           return;
         }
 
+        // Validate wallet account address
+        const walletAccount = walletClient.account?.address ?? account;
+        if (!isValidAddress(walletAccount)) {
+          showMessage("Invalid wallet account address", "error");
+          return;
+        }
+
         const txHash = await walletClient.sendTransaction({
-          to: "0x1f1dd9c30181e8e49D5537Bc3E81c33896e778Bd",
-          value: ethers.parseEther("10"),
-          account: walletClient.account?.address ?? account,
+          to: donationAddress,
+          value: donationValue,
+          account: walletAccount,
         });
         await client.waitForTransactionReceipt({ hash: txHash });
         showMessage("Thanks for donating!", "success");
@@ -1031,14 +1329,23 @@ function App() {
 
       const signer = await provider.getSigner();
       const tx = await signer.sendTransaction({
-        to: "0x1f1dd9c30181e8e49D5537Bc3E81c33896e778Bd",
-        value: ethers.parseEther("10"),
+        to: donationAddress,
+        value: donationValue,
       });
       await tx.wait();
       showMessage("Thanks for donating!", "success");
     } catch (err) {
-      showMessage("Donation failed", "error");
-      console.error(err);
+      // Don't expose sensitive error details to users
+      let errorMessage = "Donation failed";
+      if (err?.message) {
+        if (err.message.includes("user rejected") || err.message.includes("User denied")) {
+          errorMessage = "Transaction rejected by user";
+        } else if (err.message.includes("insufficient funds")) {
+          errorMessage = "Insufficient funds for donation";
+        }
+      }
+      showMessage(errorMessage, "error");
+      console.error("Donation error:", err);
     } finally {
       setLoading((prev) => ({ ...prev, donation: false }));
     }
@@ -1068,7 +1375,7 @@ function App() {
   useEffect(() => {
     // Если walletType уже установлен как 'metamask', не обрабатываем это как WalletConnect
     if (walletType === 'metamask') return;
-    
+
     if (!isConnected || !address) {
       if (isDisconnecting) {
         setIsDisconnecting(false);
@@ -1199,19 +1506,49 @@ function App() {
 
   useEffect(() => {
     let interval;
-    if (timeLeft > 0) {
-      interval = setInterval(() => {
-        setTimeLeft((prev) => Math.max(prev - 1, 0));
-      }, 1000);
+    // Validate timeLeft to prevent timer manipulation attacks
+    if (timeLeft != null && typeof timeLeft === 'number') {
+      // Ensure timeLeft is within reasonable bounds (0 to 1 year in seconds)
+      const maxTime = 365 * 24 * 60 * 60; // 1 year in seconds
+      const safeTimeLeft = Math.max(0, Math.min(timeLeft, maxTime));
+      
+      if (safeTimeLeft > 0 && safeTimeLeft <= maxTime) {
+        interval = setInterval(() => {
+          setTimeLeft((prev) => {
+            if (prev == null || typeof prev !== 'number') return 0;
+            const nextValue = prev - 1;
+            // Ensure value stays within bounds
+            return Math.max(0, Math.min(nextValue, maxTime));
+          });
+        }, 1000);
+      } else if (safeTimeLeft <= 0) {
+        setTimeLeft(0);
+      }
     }
-    return () => clearInterval(interval);
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [timeLeft]);
 
   // Закрытие выпадающего списка при клике вне его
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (isNetworkDropdownOpen && !event.target.closest('.network-dropdown-container')) {
-        setIsNetworkDropdownOpen(false);
+      // Validate event target
+      if (!event || !event.target) return;
+      
+      try {
+        if (isNetworkDropdownOpen) {
+          // Validate that closest is a function and result is valid
+          const closestElement = event.target.closest && typeof event.target.closest === 'function' 
+            ? event.target.closest('.network-dropdown-container')
+            : null;
+          
+          if (!closestElement) {
+            setIsNetworkDropdownOpen(false);
+          }
+        }
+      } catch (err) {
+        console.warn("Error in network dropdown click handler:", err);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -1238,8 +1575,19 @@ function App() {
 
       modalSelectors.forEach(selector => {
         try {
+          // Validate selector to prevent injection attacks
+          if (typeof selector !== 'string' || selector.length > 200) {
+            return; // Skip invalid selectors
+          }
           const modals = document.querySelectorAll(selector);
+          // Validate querySelector results
+          if (!modals || !modals.length) return;
+          
           modals.forEach(modal => {
+            // Validate DOM element before manipulation
+            if (!modal || typeof modal !== 'object' || !modal.nodeType || modal.nodeType !== 1) {
+              return; // Skip invalid DOM nodes
+            }
             if (modal && modal.offsetParent !== null) {
               // Применяем стили к самому модальному окну
               modal.style.setProperty('display', 'flex', 'important');
@@ -1259,37 +1607,44 @@ function App() {
 
               // Обрабатываем все дочерние элементы, особенно контейнеры
               const allChildren = modal.querySelectorAll('*');
-              allChildren.forEach((child, index) => {
-                if (child && child.style) {
-                  // Убираем позиционирование снизу
-                  if (child.style.bottom || child.getAttribute('style')?.includes('bottom')) {
-                    child.style.setProperty('bottom', 'auto', 'important');
-                    child.style.setProperty('top', 'auto', 'important');
-                    child.style.setProperty('position', 'relative', 'important');
-                    child.style.setProperty('transform', 'none', 'important');
-                    child.style.setProperty('align-self', 'center', 'important');
+              // Validate querySelector results
+              if (allChildren && allChildren.length) {
+                allChildren.forEach((child, index) => {
+                  // Validate DOM element before manipulation
+                  if (!child || typeof child !== 'object' || !child.nodeType || child.nodeType !== 1) {
+                    return; // Skip invalid DOM nodes
                   }
+                  if (child && child.style) {
+                    // Убираем позиционирование снизу
+                    if (child.style.bottom || child.getAttribute('style')?.includes('bottom')) {
+                      child.style.setProperty('bottom', 'auto', 'important');
+                      child.style.setProperty('top', 'auto', 'important');
+                      child.style.setProperty('position', 'relative', 'important');
+                      child.style.setProperty('transform', 'none', 'important');
+                      child.style.setProperty('align-self', 'center', 'important');
+                    }
 
-                  // Убираем transform, который может сдвигать элемент
-                  const transform = child.style.transform || child.getAttribute('style')?.match(/transform:\s*([^;]+)/)?.[1];
-                  if (transform && (transform.includes('translateY') || transform.includes('translate'))) {
-                    child.style.setProperty('transform', 'none', 'important');
-                  }
+                    // Убираем transform, который может сдвигать элемент
+                    const transform = child.style.transform || child.getAttribute('style')?.match(/transform:\s*([^;]+)/)?.[1];
+                    if (transform && (transform.includes('translateY') || transform.includes('translate'))) {
+                      child.style.setProperty('transform', 'none', 'important');
+                    }
 
-                  // Применяем отступы и ширину к первому уровню дочерних элементов
-                  if (child.parentElement === modal) {
-                    child.style.setProperty('margin', '0 5px', 'important');
-                    child.style.setProperty('max-width', 'calc(100% - 10px)', 'important');
-                    child.style.setProperty('width', 'calc(100% - 10px)', 'important');
-                    child.style.setProperty('align-self', 'center', 'important');
-                  }
+                    // Применяем отступы и ширину к первому уровню дочерних элементов
+                    if (child.parentElement === modal) {
+                      child.style.setProperty('margin', '0 5px', 'important');
+                      child.style.setProperty('max-width', 'calc(100% - 10px)', 'important');
+                      child.style.setProperty('width', 'calc(100% - 10px)', 'important');
+                      child.style.setProperty('align-self', 'center', 'important');
+                    }
 
-                  // Убираем темный фон
-                  if (child.style.background && child.style.background !== 'transparent') {
-                    child.style.setProperty('background', 'transparent', 'important');
+                    // Убираем темный фон
+                    if (child.style.background && child.style.background !== 'transparent') {
+                      child.style.setProperty('background', 'transparent', 'important');
+                    }
                   }
-                }
-              });
+                });
+              }
             }
           });
         } catch (e) {
@@ -1577,6 +1932,17 @@ function App() {
           className="concept-evaluation-link"
         >
           Concept Evaluation Summary
+        </a>
+        <a
+          href="https://chatgpt.com/share/692a24c2-83d0-8000-b5a9-56f89c625e1a"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="concept-evaluation-link security-audit-link"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="shield-icon">
+            <path d="M12 2L4 5V11C4 16.55 7.16 21.74 12 23C16.84 21.74 20 16.55 20 11V5L12 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          Contract security audit
         </a>
       </div>
   );

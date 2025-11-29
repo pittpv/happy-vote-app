@@ -26,6 +26,33 @@ A standalone lightweight miniapp that lets users vote on how they feel — eithe
   - Improved logging for debugging
 - **Wallet Type Detection**: Fixed wallet type detection to correctly identify MetaMask vs WalletConnect connections
 
+### Security Updates (29-11-2025)
+
+- **RPC Endpoint Protection**: 
+  - Whitelist validation for RPC endpoints to prevent endpoint substitution attacks
+  - Only allows HTTPS connections to authorized Monad RPC servers
+  - Validates all RPC URLs before creating network clients
+  
+- **XSS Prevention**: 
+  - All user-facing messages are sanitized to prevent cross-site scripting attacks
+  - Removes HTML tags, JavaScript protocols, and event handlers from error messages
+  - Message length limits to prevent DoS attacks
+  
+- **ABI Validation**: 
+  - Validates ABI structure before contract interactions to prevent malicious ABI injection
+  - Ensures only valid contract interfaces are used for read/write operations
+  - Protects against corrupted or malicious ABI data
+  
+- **Timer Protection**: 
+  - Validates and bounds timer values to prevent timer manipulation attacks
+  - Limits timer duration to reasonable ranges (0 to 1 year)
+  - Prevents negative or excessive timer values
+  
+- **DOM Security**: 
+  - Validates all DOM selectors and elements before manipulation
+  - Checks element types and node types to prevent DOM-based attacks
+  - Validates querySelector results and element properties before use
+
 ### Previous update (27-11-2025)
 
 - **Network selector**: Choose between Monad Mainnet and Testnet with visual network badges

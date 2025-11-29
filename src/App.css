@@ -812,6 +812,21 @@ body.dark-theme .link-button:hover {
   transition: color 0.2s ease;
 }
 
+.concept-evaluation-link.security-audit-link {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.concept-evaluation-link .shield-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: currentColor;
+}
+
 .concept-evaluation-link:hover {
   color: #4b5563;
   text-decoration: underline;
