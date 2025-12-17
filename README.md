@@ -12,7 +12,13 @@ A standalone lightweight miniapp that lets users vote on how they feel — eithe
 
 ## 🚀 Updates
 
-### Latest update (29-11-2025)
+### Latest update (17-12-2025)
+
+- The updated contract for the testnet has been deployed after the Monad Testnet Re-Genesis.
+- The `VotesInitialized` function has been added to the contract to transfer the number of votes from the snapshot (the function can only be called over and only once).
+- Votes transferred to the new contract
+
+### Previous update (29-11-2025)
 
 - **Gas Refund Feature**: Optional gas fee reimbursement for voting transactions
   - Automatically enabled/disabled by contract owner
@@ -90,7 +96,7 @@ A standalone lightweight miniapp that lets users vote on how they feel — eithe
 
 Mainnet `contracts/HappyVoteLeaderboard.sol`, [Verified](https://monadscan.com/address/0xdFFEFD8eF040702A4657a98f189860169104257A#code)
 
-Testnet `contracts/HappyVote.sol` 
+Testnet `contracts/HappyVote-Re-Genesis.sol`, [Verified](https://monad-testnet.socialscan.io/address/0x40198e59306181e69affa25c69c5ba50f8f4cd0e#contract)  
 
 ## ✍️ Feedback
 

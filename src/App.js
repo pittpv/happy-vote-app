@@ -99,7 +99,7 @@ const isValidAbi = (abi) => {
   return abi.every(item => {
     if (typeof item !== 'object' || item === null) return false;
     // Basic structure validation
-    return typeof item.type === 'string' && 
+    return typeof item.type === 'string' &&
            (item.type === 'function' || item.type === 'event' || item.type === 'constructor' || item.type === 'fallback' || item.type === 'receive');
   });
 };
@@ -127,7 +127,7 @@ const NETWORK_LIST = [
     explorerUrl: "https://testnet.monadvision.com",
     explorerName: "Monad Explorer",
     nativeCurrency: { name: "Monad", symbol: "MON", decimals: 18 },
-    contractAddress: process.env.REACT_APP_TESTNET_CONTRACT_ADDRESS || "0x7fB4F5Fc2a6f2FAa86F5F37EAEE8A0db820ad9E0",
+    contractAddress: process.env.REACT_APP_TESTNET_CONTRACT_ADDRESS || "0x40198e59306181e69affa25c69c5ba50f8f4cd0e",
     abi: testnetAbi,
     hasLeaderboard: false,
   },
@@ -229,7 +229,7 @@ function App() {
         chainConfig.rpcUrls.default.http = validatedUrls;
         chainConfig.rpcUrls.public.http = validatedUrls;
       }
-      
+
       publicClientCacheRef.current[networkKey] = createPublicClient({
         chain: chainConfig,
         transport: http(rpcUrl),
@@ -328,7 +328,7 @@ function App() {
     const safeType = validTypes.includes(type) ? type : 'info';
     // Validate and limit duration to prevent DoS
     const safeDuration = Math.max(0, Math.min(Number(duration) || 5000, 30000)); // Max 30 seconds
-    
+
     setMessage({ text: sanitizedText, type: safeType });
     if (safeDuration > 0) {
       const timeoutId = setTimeout(() => setMessage(null), safeDuration);
@@ -407,7 +407,7 @@ function App() {
         address: config.contractAddress,
         functionName: "getVotes",
       });
-      
+
       setHappyVotes(safeNumber(happy));
       setSadVotes(safeNumber(sad));
 
@@ -474,7 +474,7 @@ function App() {
     const handleClickOutside = (event) => {
       // Validate event target
       if (!event || !event.target) return;
-      
+
       try {
         const container = document.querySelector('.refund-badge-container');
         // Validate DOM element before use
@@ -667,7 +667,7 @@ function App() {
           showMessage("Invalid contract ABI for this network", "error");
           return;
         }
-        
+
         const signer = await provider.getSigner();
         const contract = new ethers.Contract(config.contractAddress, config.abi, signer);
         setContract(contract);
@@ -1511,7 +1511,7 @@ function App() {
       // Ensure timeLeft is within reasonable bounds (0 to 1 year in seconds)
       const maxTime = 365 * 24 * 60 * 60; // 1 year in seconds
       const safeTimeLeft = Math.max(0, Math.min(timeLeft, maxTime));
-      
+
       if (safeTimeLeft > 0 && safeTimeLeft <= maxTime) {
         interval = setInterval(() => {
           setTimeLeft((prev) => {
@@ -1535,14 +1535,14 @@ function App() {
     const handleClickOutside = (event) => {
       // Validate event target
       if (!event || !event.target) return;
-      
+
       try {
         if (isNetworkDropdownOpen) {
           // Validate that closest is a function and result is valid
-          const closestElement = event.target.closest && typeof event.target.closest === 'function' 
+          const closestElement = event.target.closest && typeof event.target.closest === 'function'
             ? event.target.closest('.network-dropdown-container')
             : null;
-          
+
           if (!closestElement) {
             setIsNetworkDropdownOpen(false);
           }
@@ -1582,7 +1582,7 @@ function App() {
           const modals = document.querySelectorAll(selector);
           // Validate querySelector results
           if (!modals || !modals.length) return;
-          
+
           modals.forEach(modal => {
             // Validate DOM element before manipulation
             if (!modal || typeof modal !== 'object' || !modal.nodeType || modal.nodeType !== 1) {
