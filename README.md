@@ -12,6 +12,11 @@ A standalone lightweight miniapp that lets users vote on how they feel — eithe
 
 ## 🚀 Updates
 
+### Latest update (23-12-2025)
+
+- Added support for Ethereum and Sepolia networks
+- Contracts [verified](#ethereum)
+
 ### Latest update (17-12-2025)
 
 - The updated contract for the testnet has been deployed after the Monad Testnet Re-Genesis.
@@ -94,9 +99,17 @@ A standalone lightweight miniapp that lets users vote on how they feel — eithe
 
 ## 🧱 Smart Contract
 
+### Monad
+
 Mainnet `contracts/HappyVoteLeaderboard.sol`, [Verified](https://monadscan.com/address/0xdFFEFD8eF040702A4657a98f189860169104257A#code)
 
 Testnet `contracts/HappyVote-Re-Genesis.sol`, [Verified](https://monad-testnet.socialscan.io/address/0x40198e59306181e69affa25c69c5ba50f8f4cd0e#contract)  
+
+### Ethereum
+
+Mainnet `contracts/HappyVoteLeaderboard.sol`, [Verified](https://eth.blockscout.com/address/0x718E4a1FDd2467C825D1Dd3d56B4f7320C2fF45C?tab=contract)
+
+Sepolia `contracts/HappyVoteLeaderboard.sol`, [Verified](https://eth-sepolia.blockscout.com/address/0x21204825a0a542aBe26Cc034B3De1D92c5c989E3?tab=contract_code)
 
 ## ✍️ Feedback
 

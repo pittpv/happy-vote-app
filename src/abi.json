@@ -1,15 +1,5 @@
 [
   {
-    "inputs": [],
-    "name": "getVotePercentages",
-    "outputs": [
-      { "internalType": "uint256", "name": "happyPercentage", "type": "uint256" },
-      { "internalType": "uint256", "name": "sadPercentage", "type": "uint256" }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
     "inputs": [{ "internalType": "bool", "name": "isHappy", "type": "bool" }],
     "name": "vote",
     "outputs": [],
@@ -44,5 +34,4 @@
     "stateMutability": "view",
     "type": "function"
   }
-
 ]

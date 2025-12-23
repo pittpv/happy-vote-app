@@ -58,8 +58,60 @@ const monadMainnet = {
   testnet: false,
 }
 
+const ethMainnet = {
+  id: 1,
+  name: 'Ethereum',
+  network: 'eth-mainnet',
+  nativeCurrency: {
+    decimals: 18,
+    name: 'Ethereum',
+    symbol: 'ETH',
+  },
+  rpcUrls: {
+    default: {
+      http: ['https://eth.llamarpc.com'],
+    },
+    public: {
+      http: ['https://eth.llamarpc.com'],
+    },
+  },
+  blockExplorers: {
+    default: {
+      name: 'Ethereum',
+      url: 'https://etherscan.io',
+    },
+  },
+  testnet: false,
+}
+
+const ethSepolia = {
+  id: 11155111,
+  name: 'Sepolia',
+  network: 'eth-sepolia',
+  nativeCurrency: {
+    decimals: 18,
+    name: 'Sepolia',
+    symbol: 'ETH',
+  },
+  rpcUrls: {
+    default: {
+      http: ['https://ethereum-sepolia-rpc.publicnode.com'],
+    },
+    public: {
+      http: ['https://ethereum-sepolia-rpc.publicnode.com'],
+    },
+  },
+  blockExplorers: {
+    default: {
+      name: 'Sepolia Ethereum',
+      url: 'https://sepolia.etherscan.io',
+    },
+  },
+  testnet: false,
+}
+
 // Настройка сетей
-export const networks = [monadMainnet, monadTestnet,]
+export const networks = [monadMainnet, monadTestnet, ethMainnet, ethSepolia]
 
 // Метаданные приложения
 const metadata = {
@@ -83,6 +135,9 @@ export const modal = createAppKit({
   projectId,
   features: {
     analytics: true
+  },
+  themeVariables: {
+    '--apkt-font-family': '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif'
   }
 })
 

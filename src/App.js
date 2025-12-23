@@ -9,6 +9,34 @@ import { useAccount, useDisconnect, useChainId, useSwitchChain, useWalletClient 
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
+// Helper function to detect wallet type
+const detectWalletType = () => {
+  if (typeof window === 'undefined' || !window.ethereum) return null;
+  
+  // Check for Rabby Wallet
+  if (window.ethereum.isRabby) {
+    return 'rabby';
+  }
+  
+  // Check for MetaMask
+  if (window.ethereum.isMetaMask) {
+    return 'metamask';
+  }
+  
+  // Check for other common wallets that use window.ethereum
+  // Rabby also sets isRabby, but some versions might not
+  if (window.ethereum.providers) {
+    // Multiple wallets installed
+    const rabbyProvider = window.ethereum.providers.find(p => p.isRabby);
+    if (rabbyProvider) return 'rabby';
+    const metaMaskProvider = window.ethereum.providers.find(p => p.isMetaMask);
+    if (metaMaskProvider) return 'metamask';
+  }
+  
+  // Default: treat as MetaMask-compatible wallet
+  return 'metamask';
+};
+
 // Helper function to validate Ethereum address
 const isValidAddress = (address) => {
   if (!address || typeof address !== 'string') return false;
@@ -62,6 +90,8 @@ const ALLOWED_RPC_DOMAINS = [
   'rpc1.monad.xyz',
   'rpc.monad.xyz',
   'testnet-rpc.monad.xyz',
+  'ethereum-sepolia-rpc.publicnode.com',
+  'eth.llamarpc.com',
 ];
 
 // Validate RPC URL to prevent endpoint substitution attacks
@@ -107,7 +137,7 @@ const isValidAbi = (abi) => {
 const NETWORK_LIST = [
   {
     key: 'mainnet',
-    label: 'Mainnet',
+    label: 'Monad',
     chainId: 143,
     chainHex: "0x8f",
     rpcUrls: ["https://rpc1.monad.xyz"],
@@ -120,7 +150,7 @@ const NETWORK_LIST = [
   },
   {
     key: 'testnet',
-    label: 'Testnet',
+    label: 'Monad Testnet',
     chainId: 10143,
     chainHex: "0x279f",
     rpcUrls: ["https://testnet-rpc.monad.xyz"],
@@ -131,6 +161,32 @@ const NETWORK_LIST = [
     abi: testnetAbi,
     hasLeaderboard: false,
   },
+  {
+    key: 'ethMainnet',
+    label: 'Ethereum',
+    chainId: 1,
+    chainHex: "0x1",
+    rpcUrls: ["https://eth.llamarpc.com"],
+    explorerUrl: "https://etherscan.io",
+    explorerName: "Ethereum",
+    nativeCurrency: { name: "Ethereum", symbol: "ETH", decimals: 18 },
+    contractAddress: process.env.REACT_APP_ETH_MAINNET_CONTRACT_ADDRESS || ZERO_ADDRESS,
+    abi: mainnetAbi,
+    hasLeaderboard: true,
+  },
+  {
+    key: 'sepolia',
+    label: 'Sepolia',
+    chainId: 11155111,
+    chainHex: "0xaa36a7",
+    rpcUrls: ["https://ethereum-sepolia-rpc.publicnode.com"],
+    explorerUrl: "https://sepolia.etherscan.io",
+    explorerName: "Sepolia Ethereum",
+    nativeCurrency: { name: "Sepolia", symbol: "ETH", decimals: 18 },
+    contractAddress: process.env.REACT_APP_SEPOLIA_CONTRACT_ADDRESS || ZERO_ADDRESS,
+    abi: mainnetAbi,
+    hasLeaderboard: true,
+  },
 ];
 
 const NETWORKS = NETWORK_LIST.reduce((acc, network) => {
@@ -138,10 +194,11 @@ const NETWORKS = NETWORK_LIST.reduce((acc, network) => {
   return acc;
 }, {});
 const NETWORK_CHAIN_CONFIG = NETWORK_LIST.reduce((acc, network) => {
+  const isEthNetwork = network.key === 'sepolia' || network.key === 'ethMainnet';
   acc[network.key] = {
     id: network.chainId,
-    name: `Monad ${network.label}`,
-    network: `monad-${network.key}`,
+    name: isEthNetwork ? network.label : `${network.label}`,
+    network: isEthNetwork ? `eth-${network.key}` : `monad-${network.key}`,
     nativeCurrency: network.nativeCurrency,
     rpcUrls: {
       default: { http: network.rpcUrls },
@@ -150,6 +207,7 @@ const NETWORK_CHAIN_CONFIG = NETWORK_LIST.reduce((acc, network) => {
     blockExplorers: {
       default: { name: network.explorerName, url: network.explorerUrl },
     },
+    testnet: network.key === 'sepolia' || network.key === 'testnet',
   };
   return acc;
 }, {});
@@ -241,6 +299,25 @@ function App() {
   const mainnetAddressMissing = NETWORKS.mainnet.contractAddress === ZERO_ADDRESS;
   const networkOptions = NETWORK_LIST;
 
+  // Получение суммы доната и валюты в зависимости от сети
+  const getDonationInfo = useCallback((networkKey) => {
+    const config = NETWORKS[networkKey];
+    if (!config) return { amount: "10", currency: "MON" };
+    
+    switch (networkKey) {
+      case 'mainnet':
+        return { amount: "50", currency: "MON" };
+      case 'testnet':
+        return { amount: "1", currency: "MON" };
+      case 'ethMainnet':
+        return { amount: "0.0005", currency: "ETH" };
+      case 'sepolia':
+        return { amount: "1", currency: "ETH" };
+      default:
+        return { amount: "10", currency: "MON" };
+    }
+  }, []);
+
   const activeNetworkKey = useMemo(() => {
     if (!chainId) return null;
     const numericChainId = Number(chainId);
@@ -269,6 +346,12 @@ function App() {
   const selectedNetworkConfig = NETWORKS[selectedNetwork] || NETWORKS.mainnet;
   const displayNetworkConfig = NETWORKS[displayNetworkKey] || selectedNetworkConfig;
   const isWalletConnectLocked = walletType === 'walletconnect' && isConnected;
+
+  // Получение суммы доната и валюты в зависимости от текущей сети
+  const donationInfo = useMemo(() => {
+    const networkKey = walletType === 'walletconnect' ? activeNetworkKey : selectedNetwork;
+    return getDonationInfo(networkKey || 'mainnet');
+  }, [walletType, activeNetworkKey, selectedNetwork, getDonationInfo]);
   // Синхронизируем chainId для WalletConnect
   useEffect(() => {
     if (walletType === 'walletconnect' && walletClient?.chain?.id) {
@@ -362,10 +445,23 @@ function App() {
 
   const initProvider = useCallback(async () => {
     if (!window.ethereum) {
-      showMessage("Please install MetaMask", "error");
+      showMessage("Please install a compatible wallet (MetaMask or Rabby)", "error");
       return null;
     }
-    const newProvider = new ethers.BrowserProvider(window.ethereum);
+    
+    // Get the correct provider if multiple wallets are installed
+    let ethereumProvider = window.ethereum;
+    const detectedType = detectWalletType();
+    
+    if (window.ethereum.providers) {
+      if (detectedType === 'rabby') {
+        ethereumProvider = window.ethereum.providers.find(p => p.isRabby) || window.ethereum;
+      } else if (detectedType === 'metamask') {
+        ethereumProvider = window.ethereum.providers.find(p => p.isMetaMask) || window.ethereum;
+      }
+    }
+    
+    const newProvider = new ethers.BrowserProvider(ethereumProvider);
     setProvider(newProvider);
     await checkNetwork(newProvider);
     return newProvider;
@@ -411,30 +507,39 @@ function App() {
       setHappyVotes(safeNumber(happy));
       setSadVotes(safeNumber(sad));
 
-      // Check if refund is enabled
-      try {
-        const refundEnabledValue = await client.readContract({
-          abi: config.abi,
-          address: config.contractAddress,
-          functionName: "refundEnabled",
-        });
-        // Handle different return types (boolean, string, number, BigInt)
-        let boolValue = false;
-        if (typeof refundEnabledValue === 'boolean') {
-          boolValue = refundEnabledValue;
-        } else if (typeof refundEnabledValue === 'string') {
-          boolValue = refundEnabledValue.toLowerCase() === 'true' || refundEnabledValue === '1';
-        } else if (typeof refundEnabledValue === 'number' || typeof refundEnabledValue === 'bigint') {
-          boolValue = Number(refundEnabledValue) !== 0;
+        // Check if refund is enabled (only if function exists in ABI)
+        const hasRefundEnabled = config.abi.some(item => 
+          item.type === 'function' && item.name === 'refundEnabled'
+        );
+        
+        if (hasRefundEnabled) {
+          try {
+            const refundEnabledValue = await client.readContract({
+              abi: config.abi,
+              address: config.contractAddress,
+              functionName: "refundEnabled",
+            });
+            // Handle different return types (boolean, string, number, BigInt)
+            let boolValue = false;
+            if (typeof refundEnabledValue === 'boolean') {
+              boolValue = refundEnabledValue;
+            } else if (typeof refundEnabledValue === 'string') {
+              boolValue = refundEnabledValue.toLowerCase() === 'true' || refundEnabledValue === '1';
+            } else if (typeof refundEnabledValue === 'number' || typeof refundEnabledValue === 'bigint') {
+              boolValue = Number(refundEnabledValue) !== 0;
+            } else {
+              boolValue = Boolean(refundEnabledValue);
+            }
+            setRefundEnabled(boolValue);
+          } catch (refundErr) {
+            // If refundEnabled call fails, set to false
+            console.warn("refundEnabled call failed:", refundErr.message);
+            setRefundEnabled(false);
+          }
         } else {
-          boolValue = Boolean(refundEnabledValue);
+          // Function doesn't exist in ABI (e.g., testnet contract)
+          setRefundEnabled(false);
         }
-        setRefundEnabled(boolValue);
-      } catch (refundErr) {
-        // If refundEnabled doesn't exist (old contract), set to false
-        console.warn("refundEnabled not available in contract", refundErr);
-        setRefundEnabled(false);
-      }
 
       if (config.hasLeaderboard) {
         const [addresses, happyCounts] = await client.readContract({
@@ -561,27 +666,36 @@ function App() {
           setHappyVotes(safeNumber(happy));
           setSadVotes(safeNumber(sad));
 
-          // Check if refund is enabled
-          try {
-            const refundEnabledValue = await client.readContract({
-              ...baseArgs,
-              functionName: "refundEnabled",
-            });
-            // Handle different return types (boolean, string, number, BigInt)
-            let boolValue = false;
-            if (typeof refundEnabledValue === 'boolean') {
-              boolValue = refundEnabledValue;
-            } else if (typeof refundEnabledValue === 'string') {
-              boolValue = refundEnabledValue.toLowerCase() === 'true' || refundEnabledValue === '1';
-            } else if (typeof refundEnabledValue === 'number' || typeof refundEnabledValue === 'bigint') {
-              boolValue = Number(refundEnabledValue) !== 0;
-            } else {
-              boolValue = Boolean(refundEnabledValue);
+          // Check if refund is enabled (only if function exists in ABI)
+          const hasRefundEnabled = config.abi.some(item => 
+            item.type === 'function' && item.name === 'refundEnabled'
+          );
+          
+          if (hasRefundEnabled) {
+            try {
+              const refundEnabledValue = await client.readContract({
+                ...baseArgs,
+                functionName: "refundEnabled",
+              });
+              // Handle different return types (boolean, string, number, BigInt)
+              let boolValue = false;
+              if (typeof refundEnabledValue === 'boolean') {
+                boolValue = refundEnabledValue;
+              } else if (typeof refundEnabledValue === 'string') {
+                boolValue = refundEnabledValue.toLowerCase() === 'true' || refundEnabledValue === '1';
+              } else if (typeof refundEnabledValue === 'number' || typeof refundEnabledValue === 'bigint') {
+                boolValue = Number(refundEnabledValue) !== 0;
+              } else {
+                boolValue = Boolean(refundEnabledValue);
+              }
+              setRefundEnabled(boolValue);
+            } catch (refundErr) {
+              // If refundEnabled call fails, set to false
+              console.warn("refundEnabled call failed:", refundErr.message);
+              setRefundEnabled(false);
             }
-            setRefundEnabled(boolValue);
-          } catch (refundErr) {
-            // If refundEnabled doesn't exist (old contract), set to false
-            console.warn("refundEnabled not available in contract", refundErr);
+          } else {
+            // Function doesn't exist in ABI (e.g., testnet contract)
             setRefundEnabled(false);
           }
 
@@ -672,37 +786,119 @@ function App() {
         const contract = new ethers.Contract(config.contractAddress, config.abi, signer);
         setContract(contract);
 
-        const [happy, sad] = await contract.getVotes();
-        setHappyVotes(Number(happy));
-        setSadVotes(Number(sad));
-
-        // Check if refund is enabled
+        // Get votes with error handling
+        // For Rabby Wallet, sometimes direct RPC calls work better than through provider
         try {
-          const refundEnabledValue = await contract.refundEnabled();
-          // Handle different return types (boolean, string, number, BigInt)
-          let boolValue = false;
-          if (typeof refundEnabledValue === 'boolean') {
-            boolValue = refundEnabledValue;
-          } else if (typeof refundEnabledValue === 'string') {
-            boolValue = refundEnabledValue.toLowerCase() === 'true' || refundEnabledValue === '1';
-          } else if (typeof refundEnabledValue === 'number' || typeof refundEnabledValue === 'bigint') {
-            boolValue = Number(refundEnabledValue) !== 0;
-          } else {
-            boolValue = Boolean(refundEnabledValue);
+          const [happy, sad] = await contract.getVotes();
+          setHappyVotes(safeNumber(happy));
+          setSadVotes(safeNumber(sad));
+        } catch (votesErr) {
+          console.error("Failed to get votes via contract:", votesErr);
+          // Try using public client (viem) as fallback for reading data
+          try {
+            const client = getNetworkClient(config.key);
+            if (client) {
+              const [happy, sad] = await client.readContract({
+                abi: config.abi,
+                address: config.contractAddress,
+                functionName: "getVotes",
+              });
+              setHappyVotes(safeNumber(happy));
+              setSadVotes(safeNumber(sad));
+              console.log("✅ Successfully got votes via public client fallback");
+            } else {
+              throw new Error("No public client available");
+            }
+          } catch (fallbackErr) {
+            console.error("Failed to get votes (fallback):", fallbackErr);
+            setHappyVotes(0);
+            setSadVotes(0);
           }
-          setRefundEnabled(boolValue);
-        } catch (refundErr) {
-          // If refundEnabled doesn't exist (old contract), set to false
-          console.warn("refundEnabled not available in contract", refundErr);
+        }
+
+        // Check if refund is enabled (only if function exists in ABI)
+        const hasRefundEnabled = config.abi.some(item => 
+          item.type === 'function' && item.name === 'refundEnabled'
+        );
+        
+        if (hasRefundEnabled) {
+          try {
+            const refundEnabledValue = await contract.refundEnabled();
+            // Handle different return types (boolean, string, number, BigInt)
+            let boolValue = false;
+            if (typeof refundEnabledValue === 'boolean') {
+              boolValue = refundEnabledValue;
+            } else if (typeof refundEnabledValue === 'string') {
+              boolValue = refundEnabledValue.toLowerCase() === 'true' || refundEnabledValue === '1';
+            } else if (typeof refundEnabledValue === 'number' || typeof refundEnabledValue === 'bigint') {
+              boolValue = Number(refundEnabledValue) !== 0;
+            } else {
+              boolValue = Boolean(refundEnabledValue);
+            }
+            setRefundEnabled(boolValue);
+          } catch (refundErr) {
+            // If refundEnabled call fails, set to false
+            console.warn("refundEnabled call failed:", refundErr.message);
+            setRefundEnabled(false);
+          }
+        } else {
+          // Function doesn't exist in ABI (e.g., testnet contract)
           setRefundEnabled(false);
         }
 
-        const canVote = await contract.canVote(account);
-        setCanVote(canVote);
+        // Get canVote with error handling
+        let canVote = false;
+        try {
+          canVote = await contract.canVote(account);
+          setCanVote(canVote);
+        } catch (canVoteErr) {
+          console.error("Failed to get canVote via contract:", canVoteErr);
+          // Try using public client (viem) as fallback
+          try {
+            const client = getNetworkClient(config.key);
+            if (client) {
+              canVote = await client.readContract({
+                abi: config.abi,
+                address: config.contractAddress,
+                functionName: "canVote",
+                args: [account],
+              });
+              setCanVote(Boolean(canVote));
+              console.log("✅ Successfully got canVote via public client fallback");
+            } else {
+              setCanVote(false);
+            }
+          } catch (fallbackErr) {
+            console.error("Failed to get canVote (fallback):", fallbackErr);
+            setCanVote(false);
+          }
+        }
 
         if (!canVote) {
-          const seconds = await contract.timeUntilNextVote(account);
-          setTimeLeft(safeNumber(seconds));
+          try {
+            const seconds = await contract.timeUntilNextVote(account);
+            setTimeLeft(safeNumber(seconds));
+          } catch (timeErr) {
+            console.error("Failed to get timeUntilNextVote:", timeErr);
+            // Try using public client as fallback
+            try {
+              const client = getNetworkClient(config.key);
+              if (client) {
+                const seconds = await client.readContract({
+                  abi: config.abi,
+                  address: config.contractAddress,
+                  functionName: "timeUntilNextVote",
+                  args: [account],
+                });
+                setTimeLeft(safeNumber(seconds));
+              } else {
+                setTimeLeft(null);
+              }
+            } catch (fallbackErr) {
+              console.error("Failed to get timeUntilNextVote (fallback):", fallbackErr);
+              setTimeLeft(null);
+            }
+          }
         } else {
           setTimeLeft(null);
         }
@@ -739,33 +935,50 @@ function App() {
 
   const connectMetaMask = useCallback(async () => {
     if (!window.ethereum) {
-      showMessage("Please install MetaMask", "error");
+      showMessage("Please install a compatible wallet (MetaMask or Rabby)", "error");
       return;
     }
 
     setLoading((prev) => ({ ...prev, wallet: true }));
 
     try {
-      const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+      // Get the correct provider if multiple wallets are installed
+      let ethereumProvider = window.ethereum;
+      const walletTypeDetected = detectWalletType();
+      
+      if (window.ethereum.providers && walletTypeDetected === 'rabby') {
+        ethereumProvider = window.ethereum.providers.find(p => p.isRabby) || window.ethereum;
+      } else if (window.ethereum.providers && walletTypeDetected === 'metamask') {
+        ethereumProvider = window.ethereum.providers.find(p => p.isMetaMask) || window.ethereum;
+      }
+
+      const accounts = await ethereumProvider.request({ method: "eth_requestAccounts" });
       const selectedAccount = accounts[0];
       setAccount(selectedAccount);
-      setWalletType('metamask');
+      
+      // Set wallet type based on detection
+      const detectedType = detectWalletType();
+      setWalletType(detectedType || 'metamask');
 
-      const provider = await initProvider();
-      if (!provider) return;
+      // Create provider with the correct ethereum instance
+      const newProvider = new ethers.BrowserProvider(ethereumProvider);
+      setProvider(newProvider);
 
-      const isCorrect = await checkNetwork(provider, selectedNetwork);
+      const isCorrect = await checkNetwork(newProvider, selectedNetwork);
       if (!isCorrect) {
-        showMessage(`Please switch MetaMask to Monad ${selectedNetworkConfig.label}`, "error");
+        const walletName = detectedType === 'rabby' ? 'Rabby Wallet' : 'MetaMask';
+        showMessage(`Please switch ${walletName} to ${selectedNetworkConfig.label}`, "error");
         return;
       }
 
-      await initContract(provider, selectedAccount, selectedNetwork);
+      await initContract(newProvider, selectedAccount, selectedNetwork);
       setIsDisconnecting(false); // Сбрасываем флаг при успешном подключении
-      showMessage("MetaMask connected", "success");
+      
+      const walletName = detectedType === 'rabby' ? 'Rabby Wallet' : 'MetaMask';
+      showMessage(`${walletName} connected`, "success");
     } catch (err) {
       setIsDisconnecting(false); // Сбрасываем флаг даже при ошибке
-      showMessage("Failed to connect MetaMask", "error");
+      showMessage("Failed to connect wallet", "error");
       console.error(err);
     } finally {
       setLoading((prev) => ({ ...prev, wallet: false }));
@@ -807,25 +1020,37 @@ function App() {
 
             setNetworkCorrect(true);
             if (showToast) {
-              showMessage(`Switched to Monad ${targetConfig.label}`, "success");
+              showMessage(`Switched to ${targetConfig.label}`, "success");
             }
             await fetchWalletConnectState(targetNetworkKey);
             return;
           }
 
           if (window.ethereum) {
+            // Get the correct provider if multiple wallets are installed
+            let ethereumProvider = window.ethereum;
+            const detectedType = detectWalletType();
+            
+            if (window.ethereum.providers) {
+              if (detectedType === 'rabby') {
+                ethereumProvider = window.ethereum.providers.find(p => p.isRabby) || window.ethereum;
+              } else if (detectedType === 'metamask') {
+                ethereumProvider = window.ethereum.providers.find(p => p.isMetaMask) || window.ethereum;
+              }
+            }
+            
             try {
-              await window.ethereum.request({
+              await ethereumProvider.request({
                 method: "wallet_switchEthereumChain",
                 params: [{ chainId: targetConfig.chainHex }],
               });
             } catch (switchError) {
               if (switchError.code === 4902) {
-                await window.ethereum.request({
+                await ethereumProvider.request({
                   method: "wallet_addEthereumChain",
                   params: [{
                     chainId: targetConfig.chainHex,
-                    chainName: `Monad ${targetConfig.label}`,
+                    chainName: `${targetConfig.label}`,
                     rpcUrls: targetConfig.rpcUrls,
                     nativeCurrency: { name: "Monad", symbol: "MON", decimals: 18 },
                     blockExplorerUrls: [targetConfig.explorerUrl],
@@ -836,12 +1061,12 @@ function App() {
               }
             }
 
-            const updatedProvider = new ethers.BrowserProvider(window.ethereum);
+            const updatedProvider = new ethers.BrowserProvider(ethereumProvider);
             setProvider(updatedProvider);
             await checkNetwork(updatedProvider, targetNetworkKey);
             if (account) await initContract(updatedProvider, account, targetNetworkKey);
             if (showToast) {
-              showMessage(`Switched to Monad ${targetConfig.label}`, "success");
+              showMessage(`Switched to ${targetConfig.label}`, "success");
             }
             return;
           }
@@ -881,7 +1106,7 @@ function App() {
 
     if (!networkCorrect) {
       console.error("❌ [Vote] Network incorrect");
-      showMessage(`Connect to Monad ${selectedNetworkConfig.label}`, "error");
+      showMessage(`Connect to ${selectedNetworkConfig.label}`, "error");
       return;
     }
 
@@ -927,7 +1152,7 @@ function App() {
         }
         if (walletClient.chain?.id !== targetConfig.chainId) {
           console.error("❌ [WalletConnect Vote] Wrong chain");
-          showMessage(`Please switch to Monad ${targetConfig.label}`, "error");
+          showMessage(`Please switch to ${targetConfig.label}`, "error");
           return;
         }
 
@@ -1040,25 +1265,27 @@ function App() {
           throw gasErr;
         }
       } else if (contract) {
-        // Для MetaMask нужно увеличить GasLimit: 1.5x для Happy, 2.5x для Sad
+        // Для MetaMask/Rabby нужно увеличить GasLimit: 1.5x для Happy, 1.7x для Sad
         const voteType = isHappy ? "Happy" : "Sad";
-        console.log(`🚀 [MetaMask Vote] Starting ${voteType} vote transaction...`);
-        console.log("🚀 [MetaMask Vote] Contract and provider available:", {
+        const walletName = walletType === 'rabby' ? 'Rabby' : 'MetaMask';
+        console.log(`🚀 [${walletName} Vote] Starting ${voteType} vote transaction...`);
+        console.log(`🚀 [${walletName} Vote] Contract and provider available:`, {
           hasContract: !!contract,
           hasProvider: !!provider,
           contractAddress: targetConfig.contractAddress,
-          voteType
+          voteType,
+          walletType
         });
 
         if (!provider) {
-          console.error("❌ [MetaMask Vote] Provider not available");
+          console.error(`❌ [${walletName} Vote] Provider not available`);
           showMessage("Provider not available", "error");
           return;
         }
 
         if (!window.ethereum) {
-          console.error("❌ [MetaMask Vote] MetaMask not available");
-          showMessage("MetaMask not available", "error");
+          console.error(`❌ [${walletName} Vote] Wallet not available`);
+          showMessage("Wallet not available", "error");
           return;
         }
 
@@ -1072,34 +1299,77 @@ function App() {
         try {
           // Получаем оценку газа от RPC
           const voteType = isHappy ? "Happy" : "Sad";
-          console.log(`📊 [MetaMask Vote] Estimating gas for ${voteType} vote...`);
-          const populatedTx = await contract.vote.populateTransaction(isHappy);
-          const estimatedGas = await provider.estimateGas(populatedTx);
+          const walletName = walletType === 'rabby' ? 'Rabby' : 'MetaMask';
+          console.log(`📊 [${walletName} Vote] Estimating gas for ${voteType} vote...`);
+          
+          // Используем прямой вызов метода контракта для более надежной работы
+          const signer = await provider.getSigner();
+          const contractWithSigner = contract.connect(signer);
+          
+          // Проверяем и синхронизируем nonce для Rabby Wallet
+          // Rabby может кэшировать старые nonce, поэтому нужно убедиться, что используем актуальный
+          if (walletType === 'rabby') {
+            try {
+              const currentNonce = await provider.getTransactionCount(account, 'pending');
+              const latestNonce = await provider.getTransactionCount(account, 'latest');
+              console.log(`📊 [${walletName} Vote] Nonce check for ${account}:`, {
+                pending: currentNonce,
+                latest: latestNonce,
+                difference: currentNonce - latestNonce
+              });
+              
+              // Если pending nonce сильно отличается от latest, это может быть проблемой
+              if (currentNonce - latestNonce > 10) {
+                console.warn(`⚠️ [${walletName} Vote] Large nonce gap detected. This might cause issues.`);
+              }
+            } catch (nonceErr) {
+              console.warn(`⚠️ [${walletName} Vote] Could not check nonce:`, nonceErr);
+            }
+          }
+          
+          // Получаем оценку газа через прямой вызов
+          let estimatedGas;
+          try {
+            estimatedGas = await contractWithSigner.vote.estimateGas(isHappy);
+          } catch (estErr) {
+            console.error(`❌ [${walletName} Vote] Gas estimation failed:`, estErr);
+            // Если оценка не удалась, используем значение по умолчанию
+            estimatedGas = isHappy ? 95000n : 110000n;
+            console.warn(`⚠️ [${walletName} Vote] Using default gas limit:`, estimatedGas.toString());
+          }
 
           // Увеличиваем GasLimit: 1.5x для Happy, 1.7x для Sad
           const multiplier = isHappy ? 150n : 170n; // 1.5x для Happy, 1.7x для Sad
           const increasedGasLimit = (estimatedGas * multiplier) / 100n;
 
-          console.log(`✅ [MetaMask Vote] Gas estimation for ${voteType} vote:`, {
+          console.log(`✅ [${walletName} Vote] Gas estimation for ${voteType} vote:`, {
             estimated: estimatedGas.toString(),
             increased: increasedGasLimit.toString(),
             multiplier: isHappy ? "1.5x" : "1.7x",
             voteType
           });
 
-          // Используем signer.sendTransaction с явным указанием gasLimit
-          // Это более надежный способ для MetaMask
-          const signer = await provider.getSigner();
-
-          console.log(`📤 [MetaMask Vote] Sending ${voteType} vote transaction with gasLimit:`, increasedGasLimit.toString());
+          console.log(`📤 [${walletName} Vote] Sending ${voteType} vote transaction with gasLimit:`, increasedGasLimit.toString());
 
           let tx;
           try {
-            tx = await signer.sendTransaction({
-              to: populatedTx.to,
-              data: populatedTx.data,
+            // Используем прямой вызов метода контракта с явным указанием gasLimit
+            // Это более надежный способ, так как кошельки лучше обрабатывают вызовы методов
+            console.log(`📤 [${walletName} Vote] Calling vote function with params:`, {
+              isHappy,
+              gasLimit: increasedGasLimit.toString(),
+              contractAddress: targetConfig.contractAddress,
+              account
+            });
+            
+            tx = await contractWithSigner.vote(isHappy, {
               gasLimit: increasedGasLimit, // Явно указываем увеличенный gasLimit
             });
+            
+            // Проверяем, что транзакция действительно создана
+            if (!tx || !tx.hash) {
+              throw new Error("Transaction object is invalid - no hash received");
+            }
           } catch (sendErr) {
             // Проверяем, не отменил ли пользователь транзакцию
             if (sendErr?.message?.includes("user rejected") ||
@@ -1107,25 +1377,44 @@ function App() {
                 sendErr?.message?.includes("User rejected") ||
                 sendErr?.code === 4001 ||
                 sendErr?.code === "ACTION_REJECTED") {
-              console.log(`🚫 [MetaMask Vote] ${voteType} vote transaction rejected by user`);
+              console.log(`🚫 [${walletName} Vote] ${voteType} vote transaction rejected by user`);
               throw sendErr; // Пробрасываем ошибку, чтобы не пытаться отправлять повторно
             }
+            
+            // Проверяем ошибки, связанные с nonce (часто встречаются в Rabby)
+            if (sendErr?.message?.includes("nonce") || sendErr?.message?.includes("Nonce")) {
+              console.error(`❌ [${walletName} Vote] Nonce error detected. This might be due to cached nonce in wallet.`);
+              console.error(`❌ [${walletName} Vote] Try: 1) Refresh the page, 2) Clear wallet cache, or 3) Send a dummy transaction to update nonce`);
+              showMessage("Nonce error. Please refresh the page and try again.", "error");
+              throw sendErr;
+            }
+            
+            // Проверяем ошибки, связанные с недостатком средств
+            if (sendErr?.message?.includes("insufficient funds") || 
+                sendErr?.message?.includes("insufficient balance")) {
+              console.error(`❌ [${walletName} Vote] Insufficient funds error`);
+              showMessage("Insufficient funds for transaction. Please add more MON to your wallet.", "error");
+              throw sendErr;
+            }
+            
+            console.error(`❌ [${walletName} Vote] Transaction send error:`, sendErr);
             throw sendErr; // Пробрасываем другие ошибки
           }
 
-          console.log(`✅ [MetaMask Vote] ${voteType} vote transaction sent, hash:`, tx.hash);
-          console.log(`📋 [MetaMask Vote] ${voteType} vote transaction details:`, {
+          console.log(`✅ [${walletName} Vote] ${voteType} vote transaction sent, hash:`, tx.hash);
+          console.log(`📋 [${walletName} Vote] ${voteType} vote transaction details:`, {
             hash: tx.hash,
             gasLimit: tx.gasLimit?.toString(),
             expectedGasLimit: increasedGasLimit.toString(),
             to: tx.to,
             from: tx.from,
+            nonce: tx.nonce?.toString(),
             voteType
           });
 
           // Проверяем, что gasLimit применился
           if (tx.gasLimit && tx.gasLimit.toString() !== increasedGasLimit.toString()) {
-            console.warn("⚠️ [MetaMask Vote] GasLimit mismatch!", {
+            console.warn(`⚠️ [${walletName} Vote] GasLimit mismatch!`, {
               requested: increasedGasLimit.toString(),
               actual: tx.gasLimit.toString(),
               ratio: (Number(tx.gasLimit) / Number(increasedGasLimit) * 100).toFixed(2) + "%"
@@ -1133,10 +1422,17 @@ function App() {
           }
 
           // Ждем подтверждения транзакции
-          console.log(`⏳ [MetaMask Vote] Waiting for ${voteType} vote confirmation...`);
+          console.log(`⏳ [${walletName} Vote] Waiting for ${voteType} vote confirmation...`);
           let receipt;
           try {
-            receipt = await tx.wait();
+            // Для Rabby Wallet используем более длительный timeout и проверяем статус
+            const timeout = walletType === 'rabby' ? 120000 : 60000; // 2 минуты для Rabby, 1 минута для других
+            receipt = await Promise.race([
+              tx.wait(),
+              new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Transaction timeout')), timeout)
+              )
+            ]);
           } catch (waitErr) {
             // Проверяем, не отменил ли пользователь транзакцию во время ожидания
             if (waitErr?.message?.includes("user rejected") ||
@@ -1144,14 +1440,91 @@ function App() {
                 waitErr?.message?.includes("User rejected") ||
                 waitErr?.code === 4001 ||
                 waitErr?.code === "ACTION_REJECTED") {
-              console.log(`🚫 [MetaMask Vote] ${voteType} vote transaction rejected by user during wait`);
+              console.log(`🚫 [${walletName} Vote] ${voteType} vote transaction rejected by user during wait`);
               throw waitErr;
             }
-            // Если транзакция провалилась по другой причине (например, out of gas), пробрасываем ошибку
-            throw waitErr;
+            
+            // Если timeout, проверяем статус транзакции вручную
+            if (waitErr?.message?.includes("timeout")) {
+              console.warn(`⚠️ [${walletName} Vote] Transaction confirmation timeout. Checking status...`);
+              try {
+                const txReceipt = await provider.getTransactionReceipt(tx.hash);
+                if (txReceipt) {
+                  receipt = txReceipt;
+                  console.log(`✅ [${walletName} Vote] Transaction found after timeout:`, {
+                    hash: receipt.hash,
+                    status: receipt.status === 1 ? "success" : "failed",
+                    blockNumber: receipt.blockNumber
+                  });
+                  // Продолжаем выполнение - receipt найден, проверка статуса будет ниже
+                } else {
+                  // Транзакция еще не включена в блок или не найдена
+                  console.warn(`⚠️ [${walletName} Vote] Transaction not yet included in block or not found. Hash:`, tx.hash);
+                  showMessage(`Transaction sent but not yet confirmed. Please check the transaction status manually. Hash: ${tx.hash.slice(0, 10)}...`, "warning");
+                  // Обновляем состояние через public client (более надежно для Rabby)
+                  try {
+                    const client = getNetworkClient(networkKey);
+                    if (client) {
+                      const [happy, sad] = await client.readContract({
+                        abi: targetConfig.abi,
+                        address: targetConfig.contractAddress,
+                        functionName: "getVotes",
+                      });
+                      setHappyVotes(safeNumber(happy));
+                      setSadVotes(safeNumber(sad));
+                      
+                      const canVote = await client.readContract({
+                        abi: targetConfig.abi,
+                        address: targetConfig.contractAddress,
+                        functionName: "canVote",
+                        args: [account],
+                      });
+                      setCanVote(Boolean(canVote));
+                      
+                      if (!canVote) {
+                        const seconds = await client.readContract({
+                          abi: targetConfig.abi,
+                          address: targetConfig.contractAddress,
+                          functionName: "timeUntilNextVote",
+                          args: [account],
+                        });
+                        setTimeLeft(safeNumber(seconds));
+                      } else {
+                        setTimeLeft(null);
+                      }
+                    } else {
+                      // Fallback to contract
+                      const [happy, sad] = await contract.getVotes();
+                      setHappyVotes(safeNumber(happy));
+                      setSadVotes(safeNumber(sad));
+                    }
+                  } catch (updateErr) {
+                    console.warn(`⚠️ [${walletName} Vote] Could not update state:`, updateErr);
+                  }
+                  // Выходим из функции - не показываем сообщение об успехе
+                  return;
+                }
+              } catch (statusErr) {
+                console.error(`❌ [${walletName} Vote] Error checking transaction status:`, statusErr);
+                // Транзакция не найдена или произошла ошибка при проверке
+                showMessage(`Transaction sent but confirmation failed. Please check the transaction status manually. Hash: ${tx.hash.slice(0, 10)}...`, "warning");
+                // Выходим из функции - не показываем сообщение об успехе
+                return;
+              }
+            } else {
+              // Если транзакция провалилась по другой причине (например, out of gas), пробрасываем ошибку
+              throw waitErr;
+            }
+          }
+          
+          // Проверяем, что receipt существует перед продолжением
+          if (!receipt) {
+            console.error(`❌ [${walletName} Vote] No receipt available, cannot confirm transaction success`);
+            showMessage("Transaction sent but could not be confirmed. Please check the transaction status manually.", "warning");
+            return;
           }
 
-          console.log(`✅ [MetaMask Vote] ${voteType} vote transaction confirmed:`, {
+          console.log(`✅ [${walletName} Vote] ${voteType} vote transaction confirmed:`, {
             hash: receipt.hash,
             gasUsed: receipt.gasUsed.toString(),
             gasLimit: receipt.gasLimit?.toString(),
@@ -1159,38 +1532,100 @@ function App() {
             voteType
           });
 
+          // Проверяем статус транзакции - только успешные транзакции продолжают выполнение
           if (receipt.status !== 1) {
+            console.error(`❌ [${walletName} Vote] Transaction failed with status:`, receipt.status);
+            showMessage("Transaction failed. Please try again.", "error");
             throw new Error("Transaction failed with status: " + receipt.status);
           }
+          
+          // Только здесь мы уверены, что транзакция успешна
+          console.log(`✅ [${walletName} Vote] Transaction successfully confirmed in block ${receipt.blockNumber}`);
 
-          const [happy, sad] = await contract.getVotes();
-          setHappyVotes(safeNumber(happy));
-          setSadVotes(safeNumber(sad));
-          setCanVote(false);
-
-          const seconds = await contract.timeUntilNextVote(account);
-          setTimeLeft(safeNumber(seconds));
-
-          if (targetConfig.hasLeaderboard && typeof contract.getHappyLeaderboard === "function") {
-            const [addresses, happyCounts] = await contract.getHappyLeaderboard();
-            // Validate and filter addresses
-            const mapped = addresses
-              .map((addr, index) => {
-                const validAddr = isValidAddress(addr) ? addr : null;
-                return {
-                  address: validAddr,
-                  happyVotes: safeNumber(happyCounts[index]),
-                };
-              })
-              .filter((row) => row.address && row.happyVotes > 0);
-            setLeaderboard(mapped);
+          // Update state after successful vote
+          // Use public client for reading as it's more reliable with Rabby
+          try {
+            const client = getNetworkClient(networkKey);
+            if (client) {
+              const [happy, sad] = await client.readContract({
+                abi: targetConfig.abi,
+                address: targetConfig.contractAddress,
+                functionName: "getVotes",
+              });
+              setHappyVotes(safeNumber(happy));
+              setSadVotes(safeNumber(sad));
+              
+              const canVote = await client.readContract({
+                abi: targetConfig.abi,
+                address: targetConfig.contractAddress,
+                functionName: "canVote",
+                args: [account],
+              });
+              setCanVote(Boolean(canVote));
+              
+              if (!canVote) {
+                const seconds = await client.readContract({
+                  abi: targetConfig.abi,
+                  address: targetConfig.contractAddress,
+                  functionName: "timeUntilNextVote",
+                  args: [account],
+                });
+                setTimeLeft(safeNumber(seconds));
+              } else {
+                setTimeLeft(null);
+              }
+            } else {
+              // Fallback to contract if client not available
+              const [happy, sad] = await contract.getVotes();
+              setHappyVotes(safeNumber(happy));
+              setSadVotes(safeNumber(sad));
+              setCanVote(false);
+              const seconds = await contract.timeUntilNextVote(account);
+              setTimeLeft(safeNumber(seconds));
+            }
+          } catch (updateErr) {
+            console.error(`❌ [${walletName} Vote] Failed to update state after vote:`, updateErr);
+            // Try contract as last resort
+            try {
+              const [happy, sad] = await contract.getVotes();
+              setHappyVotes(safeNumber(happy));
+              setSadVotes(safeNumber(sad));
+            } catch (err) {
+              console.error("Failed to update votes:", err);
+            }
           }
 
-          showMessage("Vote successful!", "success");
-        } catch (metaMaskErr) {
+          if (targetConfig.hasLeaderboard && typeof contract.getHappyLeaderboard === "function") {
+            try {
+              const [addresses, happyCounts] = await contract.getHappyLeaderboard();
+              // Validate and filter addresses
+              const mapped = addresses
+                .map((addr, index) => {
+                  const validAddr = isValidAddress(addr) ? addr : null;
+                  return {
+                    address: validAddr,
+                    happyVotes: safeNumber(happyCounts[index]),
+                  };
+                })
+                .filter((row) => row.address && row.happyVotes > 0);
+              setLeaderboard(mapped);
+            } catch (leaderboardErr) {
+              console.warn(`⚠️ [${walletName} Vote] Failed to update leaderboard:`, leaderboardErr);
+            }
+          }
+
+          // Показываем сообщение об успехе только если receipt подтвержден и статус успешный
+          // Это гарантирует, что мы не показываем успех для неподтвержденных транзакций
+          if (receipt && receipt.status === 1) {
+            showMessage("Vote successful!", "success");
+          } else {
+            console.warn(`⚠️ [${walletName} Vote] Cannot show success message - receipt status is not confirmed`);
+          }
+        } catch (walletErr) {
           const voteType = isHappy ? "Happy" : "Sad";
-          console.error(`❌ [MetaMask Vote] Error in ${voteType} vote transaction:`, metaMaskErr);
-          throw metaMaskErr; // Пробрасываем ошибку в общий catch
+          const walletName = walletType === 'rabby' ? 'Rabby' : 'MetaMask';
+          console.error(`❌ [${walletName} Vote] Error in ${voteType} vote transaction:`, walletErr);
+          throw walletErr; // Пробрасываем ошибку в общий catch
         }
       } else {
         console.error("❌ [Vote] No contract available! walletType:", walletType, "hasContract:", !!contract, "hasProvider:", !!provider);
@@ -1270,13 +1705,17 @@ function App() {
     try {
       setLoading((prev) => ({ ...prev, donation: true }));
 
-      // Validate donation amount (10 MON)
-      const donationAmount = "10";
+      // Get donation amount based on network
+      const donationInfo = getDonationInfo(networkKey || 'mainnet');
+      const donationAmount = donationInfo.amount;
       let donationValue;
       try {
         donationValue = ethers.parseEther(donationAmount);
         // Additional safety check: ensure value is reasonable
-        if (donationValue <= 0n || donationValue > ethers.parseEther("1000")) {
+        const maxAmount = networkKey === 'ethMainnet' || networkKey === 'sepolia' 
+          ? ethers.parseEther("100") 
+          : ethers.parseEther("1000");
+        if (donationValue <= 0n || donationValue > maxAmount) {
           throw new Error("Invalid donation amount");
         }
       } catch (parseErr) {
@@ -1295,7 +1734,10 @@ function App() {
           return;
         }
         if (walletClient.chain?.id !== targetConfig.chainId) {
-          showMessage(`Please switch to Monad ${targetConfig.label}`, "error");
+          const networkName = networkKey === 'ethMainnet' || networkKey === 'sepolia' 
+            ? targetConfig.label 
+            : `${targetConfig.label}`;
+          showMessage(`Please switch to ${networkName}`, "error");
           return;
         }
 
@@ -1349,7 +1791,7 @@ function App() {
     } finally {
       setLoading((prev) => ({ ...prev, donation: false }));
     }
-  }, [provider, account, walletType, walletClient, activeNetworkKey, selectedNetwork, showMessage, getNetworkClient]);
+  }, [provider, account, walletType, walletClient, activeNetworkKey, selectedNetwork, showMessage, getNetworkClient, getDonationInfo]);
 
   const handleNetworkChange = useCallback((networkKey) => {
     if (!NETWORKS[networkKey]) return;
@@ -1396,21 +1838,33 @@ function App() {
     }
 
     // Определяем тип кошелька: если есть window.ethereum и walletType еще не установлен,
-    // проверяем, подключен ли MetaMask напрямую
+    // проверяем, подключен ли MetaMask или Rabby Wallet напрямую
     // Если walletType еще не установлен, определяем его
     if (!walletType) {
-      // Проверяем, подключен ли MetaMask напрямую через window.ethereum
-      if (window.ethereum && window.ethereum.isMetaMask) {
-        // Проверяем, есть ли активные аккаунты в MetaMask
-        window.ethereum.request({ method: 'eth_accounts' })
+      const detectedType = detectWalletType();
+      
+      // Проверяем, подключен ли MetaMask или Rabby Wallet напрямую через window.ethereum
+      if (window.ethereum && (detectedType === 'metamask' || detectedType === 'rabby')) {
+        // Get the correct provider if multiple wallets are installed
+        let ethereumProvider = window.ethereum;
+        if (window.ethereum.providers) {
+          if (detectedType === 'rabby') {
+            ethereumProvider = window.ethereum.providers.find(p => p.isRabby) || window.ethereum;
+          } else if (detectedType === 'metamask') {
+            ethereumProvider = window.ethereum.providers.find(p => p.isMetaMask) || window.ethereum;
+          }
+        }
+        
+        // Проверяем, есть ли активные аккаунты
+        ethereumProvider.request({ method: 'eth_accounts' })
           .then((accounts) => {
             if (accounts && accounts.length > 0) {
-              // Если есть аккаунты в MetaMask и они совпадают с адресом из wagmi,
-              // проверяем, не был ли это MetaMask подключен напрямую
-              // Если адрес совпадает и есть provider, это может быть MetaMask
-              const isMetaMaskDirect = accounts[0]?.toLowerCase() === address?.toLowerCase() && provider;
-              if (isMetaMaskDirect) {
-                setWalletType('metamask');
+              // Если есть аккаунты и они совпадают с адресом из wagmi,
+              // проверяем, не был ли это кошелек подключен напрямую
+              // Если адрес совпадает и есть provider, это может быть MetaMask/Rabby
+              const isWalletDirect = accounts[0]?.toLowerCase() === address?.toLowerCase() && provider;
+              if (isWalletDirect) {
+                setWalletType(detectedType || 'metamask');
                 setAccount(accounts[0]);
               } else {
                 setWalletType('walletconnect');
@@ -1425,7 +1879,7 @@ function App() {
             setWalletType('walletconnect');
           });
       } else {
-        // Если нет window.ethereum, это WalletConnect
+        // Если нет window.ethereum или это не MetaMask/Rabby, это WalletConnect
         setWalletType('walletconnect');
       }
       return; // Выходим, чтобы дождаться установки walletType
@@ -1467,6 +1921,18 @@ function App() {
   useEffect(() => {
     if (!window.ethereum || walletType === 'walletconnect') return;
 
+    // Get the correct provider if multiple wallets are installed
+    let ethereumProvider = window.ethereum;
+    const detectedType = detectWalletType();
+    
+    if (window.ethereum.providers) {
+      if (detectedType === 'rabby') {
+        ethereumProvider = window.ethereum.providers.find(p => p.isRabby) || window.ethereum;
+      } else if (detectedType === 'metamask') {
+        ethereumProvider = window.ethereum.providers.find(p => p.isMetaMask) || window.ethereum;
+      }
+    }
+
     const handleAccountsChanged = (accounts) => {
       if (accounts.length === 0) disconnectWallet();
       else {
@@ -1476,18 +1942,18 @@ function App() {
     };
 
     const handleChainChanged = async () => {
-      const newProvider = new ethers.BrowserProvider(window.ethereum);
+      const newProvider = new ethers.BrowserProvider(ethereumProvider);
       setProvider(newProvider);
       await checkNetwork(newProvider, selectedNetwork);
       if (account) await initContract(newProvider, account, selectedNetwork);
     };
 
-    window.ethereum.on("accountsChanged", handleAccountsChanged);
-    window.ethereum.on("chainChanged", handleChainChanged);
+    ethereumProvider.on("accountsChanged", handleAccountsChanged);
+    ethereumProvider.on("chainChanged", handleChainChanged);
 
     return () => {
-      window.ethereum.removeListener("accountsChanged", handleAccountsChanged);
-      window.ethereum.removeListener("chainChanged", handleChainChanged);
+      ethereumProvider.removeListener("accountsChanged", handleAccountsChanged);
+      ethereumProvider.removeListener("chainChanged", handleChainChanged);
     };
   }, [provider, account, initContract, checkNetwork, disconnectWallet, walletType, selectedNetwork]);
 
@@ -1693,10 +2159,45 @@ function App() {
   const topLeaderboard = leaderboard.slice(0, 10);
   const extraLeaderboard = leaderboard.slice(10);
 
-  const NetworkIcon = ({ isMainnet }) => (
+  const NetworkIcon = ({ isMainnet, networkKey }) => {
+    // Для Ethereum Mainnet показываем цветную иконку Ethereum
+    if (networkKey === 'ethMainnet') {
+      return (
+        <svg width="20" height="20" viewBox="0 0 115 182" xmlns="http://www.w3.org/2000/svg" fill="none">
+          <path fill="#F0CDC2" stroke="#1616B4" d="M57.505 181v-45.16L1.641 103.171z"></path>
+          <path fill="#C9B3F5" stroke="#1616B4" d="M57.69 181v-45.16l55.865-32.669z"></path>
+          <path fill="#88AAF1" stroke="#1616B4" d="M57.506 124.615V66.979L1 92.28z"></path>
+          <path fill="#C9B3F5" stroke="#1616B4" d="M57.69 124.615V66.979l56.506 25.302z"></path>
+          <path fill="#F0CDC2" stroke="#1616B4" d="M1 92.281 57.505 1v65.979z"></path>
+          <path fill="#B8FAF6" stroke="#1616B4" d="M114.196 92.281 57.691 1v65.979z"></path>
+        </svg>
+      );
+    }
+    
+    // Для Sepolia показываем иконку Ethereum (серая)
+    if (networkKey === 'sepolia') {
+      return (
+        <svg width="20" height="20" viewBox="0 0 256 417" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid">
+          <path fill="#9CA3AF" d="M127.961 0l-2.795 9.5v275.668l2.795 2.79 127.962-75.638z"/>
+          <path fill="#9CA3AF" opacity="0.8" d="M127.962 0L0 212.32l127.962 75.639V154.158z"/>
+          <path fill="#9CA3AF" opacity="0.6" d="M127.961 312.187l-1.575 1.92v98.199l1.575 4.6L256 236.587z"/>
+          <path fill="#9CA3AF" opacity="0.8" d="M127.962 416.905v-104.72L0 236.585z"/>
+          <path fill="#9CA3AF" opacity="0.4" d="M127.961 287.958l127.96-75.637-127.96-58.162z"/>
+          <path fill="#9CA3AF" opacity="0.6" d="M0 212.32l127.96 75.638v-133.8z"/>
+        </svg>
+      );
+    }
+    
+    // Для других сетей показываем иконку Monad
+    let iconColor = "#9CA3AF"; // Default gray for testnet
+    if (isMainnet) {
+      iconColor = "#836EF9"; // Purple for mainnet
+    }
+    
+    return (
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
         <g clipPath="url(#clip0_3845_96712)">
-          <path d="M9.99994 0C7.11219 0 0 7.112 0 9.99994C0 12.8879 7.11219 20 9.99994 20C12.8877 20 20 12.8877 20 9.99994C20 7.11212 12.8878 0 9.99994 0ZM8.44163 15.7183C7.22388 15.3864 3.94988 9.65938 4.28177 8.44163C4.61366 7.22381 10.3406 3.94987 11.5583 4.28175C12.7761 4.61358 16.0501 10.3406 15.7183 11.5584C15.3864 12.7761 9.65938 16.0501 8.44163 15.7183Z" fill={isMainnet ? "#836EF9" : "#9CA3AF"}></path>
+          <path d="M9.99994 0C7.11219 0 0 7.112 0 9.99994C0 12.8879 7.11219 20 9.99994 20C12.8877 20 20 12.8877 20 9.99994C20 7.11212 12.8878 0 9.99994 0ZM8.44163 15.7183C7.22388 15.3864 3.94988 9.65938 4.28177 8.44163C4.61366 7.22381 10.3406 3.94987 11.5583 4.28175C12.7761 4.61358 16.0501 10.3406 15.7183 11.5584C15.3864 12.7761 9.65938 16.0501 8.44163 15.7183Z" fill={iconColor}></path>
         </g>
         <defs>
           <clipPath id="clip0_3845_96712">
@@ -1704,7 +2205,8 @@ function App() {
           </clipPath>
         </defs>
       </svg>
-  );
+    );
+  };
 
   const WalletIcon = () => (
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1723,8 +2225,8 @@ function App() {
                   onClick={() => setIsNetworkDropdownOpen(!isNetworkDropdownOpen)}
                   disabled={isWalletConnectLocked}
               >
-                <NetworkIcon isMainnet={selectedNetwork === 'mainnet'} />
-                <span>Monad {selectedNetworkConfig.label}</span>
+                <NetworkIcon isMainnet={selectedNetwork === 'mainnet'} networkKey={selectedNetwork} />
+                <span>{(selectedNetwork === 'sepolia' || selectedNetwork === 'ethMainnet') ? selectedNetworkConfig.label : `${selectedNetworkConfig.label}`}</span>
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" className="dropdown-arrow">
                   <path d="M6 9L1 4H11L6 9Z" fill="currentColor"/>
                 </svg>
@@ -1737,8 +2239,8 @@ function App() {
                             className={`network-dropdown-item ${selectedNetwork === network.key ? 'active' : ''}`}
                             onClick={() => handleNetworkChange(network.key)}
                         >
-                          <NetworkIcon isMainnet={network.key === 'mainnet'} />
-                          <span>Monad {network.label}</span>
+                          <NetworkIcon isMainnet={network.key === 'mainnet'} networkKey={network.key} />
+                          <span>{(network.key === 'sepolia' || network.key === 'ethMainnet') ? network.label : `${network.label}`}</span>
                         </button>
                     ))}
                   </div>
@@ -1784,14 +2286,14 @@ function App() {
                   className="switch-network-button"
                   disabled={loading.network}
               >
-                {loading.network ? "Switching..." : `Switch to Monad ${selectedNetworkConfig.label}`}
+                {loading.network ? "Switching..." : `Switch to ${selectedNetworkConfig.label}`}
               </button>
             </div>
         )}
 
         <div className="title-row">
           <h1 className="app-title">Make the world happier 🌍</h1>
-          <span className={`network-badge ${displayNetworkKey === 'mainnet' ? 'badge-mainnet' : 'badge-testnet'}`}>
+          <span className={`network-badge ${displayNetworkKey === 'mainnet' || displayNetworkKey === 'ethMainnet' ? 'badge-mainnet' : 'badge-testnet'}`}>
             {displayNetworkConfig?.label || 'Mainnet'}
           </span>
           {refundEnabled ? (
@@ -1813,7 +2315,7 @@ function App() {
         </div>
 
         <p className="app-description">
-          The app is designed to highlight the abundance of positivity around us and to track the overall mood of users across the Monad network.
+          The app is designed to highlight the abundance of positivity around us and to track the overall mood of users across the {displayNetworkKey === 'sepolia' ? 'Sepolia' : displayNetworkKey === 'ethMainnet' ? 'Ethereum' : displayNetworkKey === 'testnet' ? 'Monad Testnet' : 'Monad'} network.
         </p>
 
         <div className="vote-section">
@@ -1858,15 +2360,15 @@ function App() {
             <p>Total votes: <strong>{totalVotes}</strong></p>
           </div>
 
-          {displayNetworkKey === 'mainnet' && (
+          {displayNetworkConfig?.hasLeaderboard && (
               <div className="leaderboard">
                 <div className="leaderboard-header">
                   <h3>Happy Leaderboard</h3>
-                  <span>Top smiles on Monad {displayNetworkConfig?.label}</span>
+                  <span>Top smiles on {displayNetworkConfig?.label}</span>
                 </div>
 
                 {topLeaderboard.length === 0 ? (
-                    <p className="leaderboard-empty">Be the first happy voter on mainnet!</p>
+                    <p className="leaderboard-empty">Be the first happy voter on {displayNetworkConfig?.label}!</p>
                 ) : (
                     <>
                       <ol className="leaderboard-list">
@@ -1920,7 +2422,7 @@ function App() {
                 className="donate-button"
                 disabled={loading.donation}
             >
-              {loading.donation ? "Processing..." : "Donate 10 MON"}
+              {loading.donation ? "Processing..." : `Donate ${donationInfo.amount} ${donationInfo.currency}`}
             </button>
           </div>
         </div>
