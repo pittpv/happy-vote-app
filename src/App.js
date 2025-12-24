@@ -484,6 +484,11 @@ function App() {
   }, [checkNetwork, showMessage]);
 
   const fetchSelectedNetworkStats = useCallback(async () => {
+    // Skip if WalletConnect is active and account is connected - fetchWalletConnectState handles this
+    if (walletType === 'walletconnect' && account) {
+      return;
+    }
+    
     const config = NETWORKS[selectedNetwork] || NETWORKS.mainnet;
     if (!config || !config.contractAddress || config.contractAddress === ZERO_ADDRESS) {
       console.warn(`No contract address configured for network: ${selectedNetwork}`);
@@ -565,30 +570,40 @@ function App() {
         }
 
       if (config.hasLeaderboard) {
-        const [addresses, happyCounts] = await client.readContract({
-          abi: config.abi,
-          address: config.contractAddress,
-          functionName: "getHappyLeaderboard",
-        });
-        // Validate and filter addresses
-        const mapped =
-            addresses?.map((addr, index) => {
-              // Validate address format
-              const validAddr = isValidAddress(addr) ? addr : null;
-              return {
-                address: validAddr,
-                happyVotes: safeNumber(happyCounts[index]),
-              };
-            })
-            .filter((row) => row.address && row.happyVotes > 0) || [];
-        setLeaderboard(mapped);
+        try {
+          const [addresses, happyCounts] = await client.readContract({
+            abi: config.abi,
+            address: config.contractAddress,
+            functionName: "getHappyLeaderboard",
+          });
+          // Validate and filter addresses
+          const mapped =
+              addresses?.map((addr, index) => {
+                // Validate address format
+                const validAddr = isValidAddress(addr) ? addr : null;
+                return {
+                  address: validAddr,
+                  happyVotes: safeNumber(happyCounts[index]),
+                };
+              })
+              .filter((row) => row.address && row.happyVotes > 0) || [];
+          setLeaderboard(mapped);
+        } catch (leaderboardErr) {
+          console.warn("Failed to fetch leaderboard for network:", config.key, leaderboardErr);
+          setLeaderboard([]);
+        }
       } else {
         setLeaderboard([]);
       }
     } catch (err) {
-      console.error("Failed to fetch network stats", err);
+      console.error(`Failed to fetch network stats for ${config.key}:`, err);
+      // Set stats to 0 on error to ensure UI updates
+      setHappyVotes(0);
+      setSadVotes(0);
+      setLeaderboard([]);
+      setRefundEnabled(false);
     }
-  }, [selectedNetwork, getNetworkClient]);
+  }, [selectedNetwork, getNetworkClient, walletType, account]);
 
   useEffect(() => {
     fetchSelectedNetworkStats();
@@ -1031,6 +1046,11 @@ function App() {
           setLoading((prev) => ({ ...prev, network: true }));
 
           if (walletType === 'walletconnect') {
+            // Clear stats before switching to prevent showing old data
+            setLeaderboard([]);
+            setHappyVotes(0);
+            setSadVotes(0);
+            
             if (switchChain) {
               await switchChain({ chainId: targetConfig.chainId });
             } else if (walletClient?.switchChain) {
@@ -1088,6 +1108,9 @@ function App() {
             setProvider(updatedProvider);
             await checkNetwork(updatedProvider, targetNetworkKey);
             if (account) await initContract(updatedProvider, account, targetNetworkKey);
+            // Ensure stats are refreshed after network switch
+            // fetchSelectedNetworkStats will be called automatically via useEffect when selectedNetwork changes
+            // but we also ensure it's called here for immediate update
             if (showToast) {
               showMessage(`Switched to ${targetConfig.label}`, "success");
             }
@@ -1818,6 +1841,10 @@ function App() {
 
   const handleNetworkChange = useCallback((networkKey) => {
     if (!NETWORKS[networkKey]) return;
+    // Clear all stats immediately when switching networks to prevent showing old data
+    setLeaderboard([]);
+    setHappyVotes(0);
+    setSadVotes(0);
     setSelectedNetwork(networkKey);
     setIsNetworkDropdownOpen(false);
 
