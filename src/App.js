@@ -149,19 +149,6 @@ const NETWORK_LIST = [
     hasLeaderboard: true,
   },
   {
-    key: 'testnet',
-    label: 'Monad Testnet',
-    chainId: 10143,
-    chainHex: "0x279f",
-    rpcUrls: ["https://testnet-rpc.monad.xyz"],
-    explorerUrl: "https://testnet.monadvision.com",
-    explorerName: "Monad Explorer",
-    nativeCurrency: { name: "Monad", symbol: "MON", decimals: 18 },
-    contractAddress: process.env.REACT_APP_TESTNET_CONTRACT_ADDRESS || "0x40198e59306181e69affa25c69c5ba50f8f4cd0e",
-    abi: testnetAbi,
-    hasLeaderboard: false,
-  },
-  {
     key: 'ethMainnet',
     label: 'Ethereum',
     chainId: 1,
@@ -173,6 +160,32 @@ const NETWORK_LIST = [
     contractAddress: process.env.REACT_APP_ETH_MAINNET_CONTRACT_ADDRESS || ZERO_ADDRESS,
     abi: mainnetAbi,
     hasLeaderboard: true,
+  },
+  {
+    key: 'baseMainnet',
+    label: 'Base',
+    chainId: 8453,
+    chainHex: "0x2105",
+    rpcUrls: ["https://base-rpc.publicnode.com"],
+    explorerUrl: "https://basescan.org",
+    explorerName: "Base",
+    nativeCurrency: { name: "Base", symbol: "ETH", decimals: 18 },
+    contractAddress: process.env.REACT_APP_BASE_MAINNET_CONTRACT_ADDRESS || ZERO_ADDRESS,
+    abi: mainnetAbi,
+    hasLeaderboard: true,
+  },
+  {
+    key: 'testnet',
+    label: 'Monad Testnet',
+    chainId: 10143,
+    chainHex: "0x279f",
+    rpcUrls: ["https://testnet-rpc.monad.xyz"],
+    explorerUrl: "https://testnet.monadvision.com",
+    explorerName: "Monad Explorer",
+    nativeCurrency: { name: "Monad", symbol: "MON", decimals: 18 },
+    contractAddress: process.env.REACT_APP_TESTNET_CONTRACT_ADDRESS || "0x40198e59306181e69affa25c69c5ba50f8f4cd0e",
+    abi: testnetAbi,
+    hasLeaderboard: false,
   },
   {
     key: 'sepolia',
@@ -194,7 +207,7 @@ const NETWORKS = NETWORK_LIST.reduce((acc, network) => {
   return acc;
 }, {});
 const NETWORK_CHAIN_CONFIG = NETWORK_LIST.reduce((acc, network) => {
-  const isEthNetwork = network.key === 'sepolia' || network.key === 'ethMainnet';
+  const isEthNetwork = network.key === 'sepolia' || network.key === 'ethMainnet' || network.key === 'baseMainnet';
   acc[network.key] = {
     id: network.chainId,
     name: isEthNetwork ? network.label : `${network.label}`,
@@ -2184,6 +2197,15 @@ function App() {
           <path fill="#9CA3AF" opacity="0.8" d="M127.962 416.905v-104.72L0 236.585z"/>
           <path fill="#9CA3AF" opacity="0.4" d="M127.961 287.958l127.96-75.637-127.96-58.162z"/>
           <path fill="#9CA3AF" opacity="0.6" d="M0 212.32l127.96 75.638v-133.8z"/>
+        </svg>
+      );
+    }
+    
+    // Для Base показываем иконку Base
+    if (networkKey === 'baseMainnet') {
+      return (
+        <svg width="20" height="20" viewBox="0 0 249 249" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M0 19.671C0 12.9332 0 9.56425 1.26956 6.97276C2.48511 4.49151 4.49151 2.48511 6.97276 1.26956C9.56425 0 12.9332 0 19.671 0H229.329C236.067 0 239.436 0 242.027 1.26956C244.508 2.48511 246.515 4.49151 247.73 6.97276C249 9.56425 249 12.9332 249 19.671V229.329C249 236.067 249 239.436 247.73 242.027C246.515 244.508 244.508 246.515 242.027 247.73C239.436 249 236.067 249 229.329 249H19.671C12.9332 249 9.56425 249 6.97276 247.73C4.49151 246.515 2.48511 244.508 1.26956 242.027C0 239.436 0 236.067 0 229.329V19.671Z" fill="#0000FF"/>
         </svg>
       );
     }

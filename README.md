@@ -12,6 +12,11 @@ A standalone lightweight miniapp that lets users vote on how they feel — eithe
 
 ## 🚀 Updates
 
+### Latest update (24-12-2025)
+
+- Added support for Base network
+- Contract [verified](#base)
+
 ### Latest update (23-12-2025)
 
 - Added support for Ethereum and Sepolia networks
@@ -110,6 +115,10 @@ Testnet `contracts/HappyVote-Re-Genesis.sol`, [Verified](https://monad-testnet.s
 Mainnet `contracts/HappyVoteLeaderboard.sol`, [Verified](https://eth.blockscout.com/address/0x718E4a1FDd2467C825D1Dd3d56B4f7320C2fF45C?tab=contract)
 
 Sepolia `contracts/HappyVoteLeaderboard.sol`, [Verified](https://eth-sepolia.blockscout.com/address/0x21204825a0a542aBe26Cc034B3De1D92c5c989E3?tab=contract_code)
+
+### Base
+
+Mainnet `contracts/HappyVoteLeaderboard.sol`, [Verified](https://repo.sourcify.dev/8453/0xAbb75Eb3E914418a85044Ad4D77886d116Ff454D)
 
 ## ✍️ Feedback
 

@@ -110,8 +110,34 @@ const ethSepolia = {
   testnet: false,
 }
 
+const baseMainnet = {
+  id: 8453,
+  name: 'Base',
+  network: 'base-mainnet',
+  nativeCurrency: {
+    decimals: 18,
+    name: 'Base',
+    symbol: 'ETH',
+  },
+  rpcUrls: {
+    default: {
+      http: ['https://base-rpc.publicnode.com'],
+    },
+    public: {
+      http: ['https://base-rpc.publicnode.com'],
+    },
+  },
+  blockExplorers: {
+    default: {
+      name: 'Base',
+      url: 'https://basescan.org',
+    },
+  },
+  testnet: false,
+}
+
 // Настройка сетей
-export const networks = [monadMainnet, monadTestnet, ethMainnet, ethSepolia]
+export const networks = [monadMainnet, ethMainnet, baseMainnet, monadTestnet, ethSepolia]
 
 // Метаданные приложения
 const metadata = {
