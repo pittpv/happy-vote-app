@@ -488,7 +488,7 @@ function App() {
     if (walletType === 'walletconnect' && account) {
       return;
     }
-    
+
     const config = NETWORKS[selectedNetwork] || NETWORKS.mainnet;
     if (!config || !config.contractAddress || config.contractAddress === ZERO_ADDRESS) {
       console.warn(`No contract address configured for network: ${selectedNetwork}`);
@@ -1050,7 +1050,7 @@ function App() {
             setLeaderboard([]);
             setHappyVotes(0);
             setSadVotes(0);
-            
+
             if (switchChain) {
               await switchChain({ chainId: targetConfig.chainId });
             } else if (walletClient?.switchChain) {
@@ -2470,8 +2470,8 @@ function App() {
             <a href="https://github.com/pittpv/happy-vote-app" target="_blank" rel="noopener noreferrer">
               <button className="link-button">GitHub</button>
             </a>
-            <a href="https://warpcast.com/pittpv" target="_blank" rel="noopener noreferrer">
-              <button className="link-button">Warpcast</button>
+            <a href="https://farcaster.xyz/pittpv" target="_blank" rel="noopener noreferrer">
+              <button className="link-button">Farcaster</button>
             </a>
             <a href="https://x.com/pittpv" target="_blank" rel="noopener noreferrer">
               <button className="link-button">X (Twitter)</button>
