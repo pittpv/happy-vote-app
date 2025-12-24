@@ -12,17 +12,17 @@ const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 // Helper function to detect wallet type
 const detectWalletType = () => {
   if (typeof window === 'undefined' || !window.ethereum) return null;
-  
+
   // Check for Rabby Wallet
   if (window.ethereum.isRabby) {
     return 'rabby';
   }
-  
+
   // Check for MetaMask
   if (window.ethereum.isMetaMask) {
     return 'metamask';
   }
-  
+
   // Check for other common wallets that use window.ethereum
   // Rabby also sets isRabby, but some versions might not
   if (window.ethereum.providers) {
@@ -32,7 +32,7 @@ const detectWalletType = () => {
     const metaMaskProvider = window.ethereum.providers.find(p => p.isMetaMask);
     if (metaMaskProvider) return 'metamask';
   }
-  
+
   // Default: treat as MetaMask-compatible wallet
   return 'metamask';
 };
@@ -92,6 +92,7 @@ const ALLOWED_RPC_DOMAINS = [
   'testnet-rpc.monad.xyz',
   'ethereum-sepolia-rpc.publicnode.com',
   'eth.llamarpc.com',
+  'base-rpc.publicnode.com',
 ];
 
 // Validate RPC URL to prevent endpoint substitution attacks
@@ -316,13 +317,15 @@ function App() {
   const getDonationInfo = useCallback((networkKey) => {
     const config = NETWORKS[networkKey];
     if (!config) return { amount: "10", currency: "MON" };
-    
+
     switch (networkKey) {
       case 'mainnet':
         return { amount: "50", currency: "MON" };
       case 'testnet':
         return { amount: "1", currency: "MON" };
       case 'ethMainnet':
+        return { amount: "0.0005", currency: "ETH" };
+      case 'baseMainnet':
         return { amount: "0.0005", currency: "ETH" };
       case 'sepolia':
         return { amount: "1", currency: "ETH" };
@@ -461,11 +464,11 @@ function App() {
       showMessage("Please install a compatible wallet (MetaMask or Rabby)", "error");
       return null;
     }
-    
+
     // Get the correct provider if multiple wallets are installed
     let ethereumProvider = window.ethereum;
     const detectedType = detectWalletType();
-    
+
     if (window.ethereum.providers) {
       if (detectedType === 'rabby') {
         ethereumProvider = window.ethereum.providers.find(p => p.isRabby) || window.ethereum;
@@ -473,7 +476,7 @@ function App() {
         ethereumProvider = window.ethereum.providers.find(p => p.isMetaMask) || window.ethereum;
       }
     }
-    
+
     const newProvider = new ethers.BrowserProvider(ethereumProvider);
     setProvider(newProvider);
     await checkNetwork(newProvider);
@@ -483,6 +486,7 @@ function App() {
   const fetchSelectedNetworkStats = useCallback(async () => {
     const config = NETWORKS[selectedNetwork] || NETWORKS.mainnet;
     if (!config || !config.contractAddress || config.contractAddress === ZERO_ADDRESS) {
+      console.warn(`No contract address configured for network: ${selectedNetwork}`);
       setHappyVotes(0);
       setSadVotes(0);
       setLeaderboard([]);
@@ -499,7 +503,13 @@ function App() {
     }
 
     const client = getNetworkClient(config.key);
-    if (!client) return;
+    if (!client) {
+      console.error(`Failed to create network client for: ${config.key}`);
+      setHappyVotes(0);
+      setSadVotes(0);
+      setLeaderboard([]);
+      return;
+    }
 
     // Validate ABI before use to prevent malicious ABI injection
     if (!isValidAbi(config.abi)) {
@@ -521,10 +531,10 @@ function App() {
       setSadVotes(safeNumber(sad));
 
         // Check if refund is enabled (only if function exists in ABI)
-        const hasRefundEnabled = config.abi.some(item => 
+        const hasRefundEnabled = config.abi.some(item =>
           item.type === 'function' && item.name === 'refundEnabled'
         );
-        
+
         if (hasRefundEnabled) {
           try {
             const refundEnabledValue = await client.readContract({
@@ -680,10 +690,10 @@ function App() {
           setSadVotes(safeNumber(sad));
 
           // Check if refund is enabled (only if function exists in ABI)
-          const hasRefundEnabled = config.abi.some(item => 
+          const hasRefundEnabled = config.abi.some(item =>
             item.type === 'function' && item.name === 'refundEnabled'
           );
-          
+
           if (hasRefundEnabled) {
             try {
               const refundEnabledValue = await client.readContract({
@@ -830,10 +840,10 @@ function App() {
         }
 
         // Check if refund is enabled (only if function exists in ABI)
-        const hasRefundEnabled = config.abi.some(item => 
+        const hasRefundEnabled = config.abi.some(item =>
           item.type === 'function' && item.name === 'refundEnabled'
         );
-        
+
         if (hasRefundEnabled) {
           try {
             const refundEnabledValue = await contract.refundEnabled();
@@ -958,7 +968,7 @@ function App() {
       // Get the correct provider if multiple wallets are installed
       let ethereumProvider = window.ethereum;
       const walletTypeDetected = detectWalletType();
-      
+
       if (window.ethereum.providers && walletTypeDetected === 'rabby') {
         ethereumProvider = window.ethereum.providers.find(p => p.isRabby) || window.ethereum;
       } else if (window.ethereum.providers && walletTypeDetected === 'metamask') {
@@ -968,7 +978,7 @@ function App() {
       const accounts = await ethereumProvider.request({ method: "eth_requestAccounts" });
       const selectedAccount = accounts[0];
       setAccount(selectedAccount);
-      
+
       // Set wallet type based on detection
       const detectedType = detectWalletType();
       setWalletType(detectedType || 'metamask');
@@ -986,7 +996,7 @@ function App() {
 
       await initContract(newProvider, selectedAccount, selectedNetwork);
       setIsDisconnecting(false); // Сбрасываем флаг при успешном подключении
-      
+
       const walletName = detectedType === 'rabby' ? 'Rabby Wallet' : 'MetaMask';
       showMessage(`${walletName} connected`, "success");
     } catch (err) {
@@ -1043,7 +1053,7 @@ function App() {
             // Get the correct provider if multiple wallets are installed
             let ethereumProvider = window.ethereum;
             const detectedType = detectWalletType();
-            
+
             if (window.ethereum.providers) {
               if (detectedType === 'rabby') {
                 ethereumProvider = window.ethereum.providers.find(p => p.isRabby) || window.ethereum;
@@ -1051,7 +1061,7 @@ function App() {
                 ethereumProvider = window.ethereum.providers.find(p => p.isMetaMask) || window.ethereum;
               }
             }
-            
+
             try {
               await ethereumProvider.request({
                 method: "wallet_switchEthereumChain",
@@ -1314,11 +1324,11 @@ function App() {
           const voteType = isHappy ? "Happy" : "Sad";
           const walletName = walletType === 'rabby' ? 'Rabby' : 'MetaMask';
           console.log(`📊 [${walletName} Vote] Estimating gas for ${voteType} vote...`);
-          
+
           // Используем прямой вызов метода контракта для более надежной работы
           const signer = await provider.getSigner();
           const contractWithSigner = contract.connect(signer);
-          
+
           // Проверяем и синхронизируем nonce для Rabby Wallet
           // Rabby может кэшировать старые nonce, поэтому нужно убедиться, что используем актуальный
           if (walletType === 'rabby') {
@@ -1330,7 +1340,7 @@ function App() {
                 latest: latestNonce,
                 difference: currentNonce - latestNonce
               });
-              
+
               // Если pending nonce сильно отличается от latest, это может быть проблемой
               if (currentNonce - latestNonce > 10) {
                 console.warn(`⚠️ [${walletName} Vote] Large nonce gap detected. This might cause issues.`);
@@ -1339,7 +1349,7 @@ function App() {
               console.warn(`⚠️ [${walletName} Vote] Could not check nonce:`, nonceErr);
             }
           }
-          
+
           // Получаем оценку газа через прямой вызов
           let estimatedGas;
           try {
@@ -1374,11 +1384,11 @@ function App() {
               contractAddress: targetConfig.contractAddress,
               account
             });
-            
+
             tx = await contractWithSigner.vote(isHappy, {
               gasLimit: increasedGasLimit, // Явно указываем увеличенный gasLimit
             });
-            
+
             // Проверяем, что транзакция действительно создана
             if (!tx || !tx.hash) {
               throw new Error("Transaction object is invalid - no hash received");
@@ -1393,7 +1403,7 @@ function App() {
               console.log(`🚫 [${walletName} Vote] ${voteType} vote transaction rejected by user`);
               throw sendErr; // Пробрасываем ошибку, чтобы не пытаться отправлять повторно
             }
-            
+
             // Проверяем ошибки, связанные с nonce (часто встречаются в Rabby)
             if (sendErr?.message?.includes("nonce") || sendErr?.message?.includes("Nonce")) {
               console.error(`❌ [${walletName} Vote] Nonce error detected. This might be due to cached nonce in wallet.`);
@@ -1401,15 +1411,15 @@ function App() {
               showMessage("Nonce error. Please refresh the page and try again.", "error");
               throw sendErr;
             }
-            
+
             // Проверяем ошибки, связанные с недостатком средств
-            if (sendErr?.message?.includes("insufficient funds") || 
+            if (sendErr?.message?.includes("insufficient funds") ||
                 sendErr?.message?.includes("insufficient balance")) {
               console.error(`❌ [${walletName} Vote] Insufficient funds error`);
               showMessage("Insufficient funds for transaction. Please add more MON to your wallet.", "error");
               throw sendErr;
             }
-            
+
             console.error(`❌ [${walletName} Vote] Transaction send error:`, sendErr);
             throw sendErr; // Пробрасываем другие ошибки
           }
@@ -1442,7 +1452,7 @@ function App() {
             const timeout = walletType === 'rabby' ? 120000 : 60000; // 2 минуты для Rabby, 1 минута для других
             receipt = await Promise.race([
               tx.wait(),
-              new Promise((_, reject) => 
+              new Promise((_, reject) =>
                 setTimeout(() => reject(new Error('Transaction timeout')), timeout)
               )
             ]);
@@ -1456,7 +1466,7 @@ function App() {
               console.log(`🚫 [${walletName} Vote] ${voteType} vote transaction rejected by user during wait`);
               throw waitErr;
             }
-            
+
             // Если timeout, проверяем статус транзакции вручную
             if (waitErr?.message?.includes("timeout")) {
               console.warn(`⚠️ [${walletName} Vote] Transaction confirmation timeout. Checking status...`);
@@ -1485,7 +1495,7 @@ function App() {
                       });
                       setHappyVotes(safeNumber(happy));
                       setSadVotes(safeNumber(sad));
-                      
+
                       const canVote = await client.readContract({
                         abi: targetConfig.abi,
                         address: targetConfig.contractAddress,
@@ -1493,7 +1503,7 @@ function App() {
                         args: [account],
                       });
                       setCanVote(Boolean(canVote));
-                      
+
                       if (!canVote) {
                         const seconds = await client.readContract({
                           abi: targetConfig.abi,
@@ -1529,7 +1539,7 @@ function App() {
               throw waitErr;
             }
           }
-          
+
           // Проверяем, что receipt существует перед продолжением
           if (!receipt) {
             console.error(`❌ [${walletName} Vote] No receipt available, cannot confirm transaction success`);
@@ -1551,7 +1561,7 @@ function App() {
             showMessage("Transaction failed. Please try again.", "error");
             throw new Error("Transaction failed with status: " + receipt.status);
           }
-          
+
           // Только здесь мы уверены, что транзакция успешна
           console.log(`✅ [${walletName} Vote] Transaction successfully confirmed in block ${receipt.blockNumber}`);
 
@@ -1567,7 +1577,7 @@ function App() {
               });
               setHappyVotes(safeNumber(happy));
               setSadVotes(safeNumber(sad));
-              
+
               const canVote = await client.readContract({
                 abi: targetConfig.abi,
                 address: targetConfig.contractAddress,
@@ -1575,7 +1585,7 @@ function App() {
                 args: [account],
               });
               setCanVote(Boolean(canVote));
-              
+
               if (!canVote) {
                 const seconds = await client.readContract({
                   abi: targetConfig.abi,
@@ -1725,8 +1735,8 @@ function App() {
       try {
         donationValue = ethers.parseEther(donationAmount);
         // Additional safety check: ensure value is reasonable
-        const maxAmount = networkKey === 'ethMainnet' || networkKey === 'sepolia' 
-          ? ethers.parseEther("100") 
+        const maxAmount = networkKey === 'ethMainnet' || networkKey === 'sepolia'
+          ? ethers.parseEther("100")
           : ethers.parseEther("1000");
         if (donationValue <= 0n || donationValue > maxAmount) {
           throw new Error("Invalid donation amount");
@@ -1747,8 +1757,8 @@ function App() {
           return;
         }
         if (walletClient.chain?.id !== targetConfig.chainId) {
-          const networkName = networkKey === 'ethMainnet' || networkKey === 'sepolia' 
-            ? targetConfig.label 
+          const networkName = networkKey === 'ethMainnet' || networkKey === 'sepolia'
+            ? targetConfig.label
             : `${targetConfig.label}`;
           showMessage(`Please switch to ${networkName}`, "error");
           return;
@@ -1855,7 +1865,7 @@ function App() {
     // Если walletType еще не установлен, определяем его
     if (!walletType) {
       const detectedType = detectWalletType();
-      
+
       // Проверяем, подключен ли MetaMask или Rabby Wallet напрямую через window.ethereum
       if (window.ethereum && (detectedType === 'metamask' || detectedType === 'rabby')) {
         // Get the correct provider if multiple wallets are installed
@@ -1867,7 +1877,7 @@ function App() {
             ethereumProvider = window.ethereum.providers.find(p => p.isMetaMask) || window.ethereum;
           }
         }
-        
+
         // Проверяем, есть ли активные аккаунты
         ethereumProvider.request({ method: 'eth_accounts' })
           .then((accounts) => {
@@ -1937,7 +1947,7 @@ function App() {
     // Get the correct provider if multiple wallets are installed
     let ethereumProvider = window.ethereum;
     const detectedType = detectWalletType();
-    
+
     if (window.ethereum.providers) {
       if (detectedType === 'rabby') {
         ethereumProvider = window.ethereum.providers.find(p => p.isRabby) || window.ethereum;
@@ -2186,7 +2196,7 @@ function App() {
         </svg>
       );
     }
-    
+
     // Для Sepolia показываем иконку Ethereum (серая)
     if (networkKey === 'sepolia') {
       return (
@@ -2200,7 +2210,7 @@ function App() {
         </svg>
       );
     }
-    
+
     // Для Base показываем иконку Base
     if (networkKey === 'baseMainnet') {
       return (
@@ -2209,13 +2219,13 @@ function App() {
         </svg>
       );
     }
-    
+
     // Для других сетей показываем иконку Monad
     let iconColor = "#9CA3AF"; // Default gray for testnet
     if (isMainnet) {
       iconColor = "#836EF9"; // Purple for mainnet
     }
-    
+
     return (
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
         <g clipPath="url(#clip0_3845_96712)">
@@ -2337,7 +2347,7 @@ function App() {
         </div>
 
         <p className="app-description">
-          The app is designed to highlight the abundance of positivity around us and to track the overall mood of users across the {displayNetworkKey === 'sepolia' ? 'Sepolia' : displayNetworkKey === 'ethMainnet' ? 'Ethereum' : displayNetworkKey === 'testnet' ? 'Monad Testnet' : 'Monad'} network.
+          The app is designed to highlight the abundance of positivity around us and to track the overall mood of users across the {displayNetworkKey === 'sepolia' ? 'Sepolia' : displayNetworkKey === 'ethMainnet' ? 'Ethereum' : displayNetworkKey === 'baseMainnet' ? 'Base' : displayNetworkKey === 'testnet' ? 'Monad Testnet' : 'Monad'} network.
         </p>
 
         <div className="vote-section">
