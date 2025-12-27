@@ -256,6 +256,7 @@ function App() {
   const [isDarkTheme, setIsDarkTheme] = useState(false);
   const [walletType, setWalletType] = useState(null); // 'metamask' or 'walletconnect'
   const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false);
   const [isNetworkDropdownOpen, setIsNetworkDropdownOpen] = useState(false);
   const [selectedNetwork, setSelectedNetwork] = useState(() => {
     if (typeof window === "undefined") return 'mainnet';
@@ -439,9 +440,78 @@ function App() {
   const checkNetwork = useCallback(
       async (providerToCheck, targetNetworkKey = selectedNetwork) => {
         try {
-          if (!providerToCheck) return false;
+          // First, try to get chainId directly from window.ethereum if available
+          // This is more reliable than waiting for provider to update
+          // Check for MetaMask/Rabby wallets (not WalletConnect)
+          if (window.ethereum && (walletType === null || walletType === 'metamask' || walletType === 'rabby')) {
+            try {
+              const detectedType = detectWalletType();
+              let ethereumProvider = window.ethereum;
+              
+              if (window.ethereum.providers) {
+                if (detectedType === 'rabby') {
+                  ethereumProvider = window.ethereum.providers.find(p => p.isRabby) || window.ethereum;
+                } else if (detectedType === 'metamask') {
+                  ethereumProvider = window.ethereum.providers.find(p => p.isMetaMask) || window.ethereum;
+                }
+              }
+              
+              const chainIdHex = await ethereumProvider.request({ method: 'eth_chainId' });
+              const chainIdFromWallet = parseInt(chainIdHex, 16);
+              
+              const expectedNetwork = NETWORKS[targetNetworkKey];
+              if (expectedNetwork) {
+                setWalletChainId(chainIdFromWallet);
+                const correct = chainIdFromWallet === expectedNetwork.chainId;
+                setNetworkCorrect(correct);
+                if (correct) {
+                  return true;
+                }
+                // If incorrect, continue to provider-based check for logging
+              }
+            } catch (e) {
+              console.warn("Failed to get chainId from wallet directly", e);
+            }
+          }
+          
+          // Fallback to provider-based check
+          if (!providerToCheck) {
+            // If no provider but we have window.ethereum, try one more time
+            if (window.ethereum && (walletType === null || walletType === 'metamask' || walletType === 'rabby')) {
+              try {
+                const detectedType = detectWalletType();
+                let ethereumProvider = window.ethereum;
+                
+                if (window.ethereum.providers) {
+                  if (detectedType === 'rabby') {
+                    ethereumProvider = window.ethereum.providers.find(p => p.isRabby) || window.ethereum;
+                  } else if (detectedType === 'metamask') {
+                    ethereumProvider = window.ethereum.providers.find(p => p.isMetaMask) || window.ethereum;
+                  }
+                }
+                
+                const chainIdHex = await ethereumProvider.request({ method: 'eth_chainId' });
+                const chainIdFromWallet = parseInt(chainIdHex, 16);
+                const expectedNetwork = NETWORKS[targetNetworkKey];
+                
+                if (expectedNetwork) {
+                  setWalletChainId(chainIdFromWallet);
+                  const correct = chainIdFromWallet === expectedNetwork.chainId;
+                  setNetworkCorrect(correct);
+                  return correct;
+                }
+              } catch (e) {
+                console.warn("Failed to get chainId from wallet in fallback", e);
+              }
+            }
+            return false;
+          }
+          
           const network = await providerToCheck.getNetwork();
-          const detectedChain = Number(network.chainId);
+          // Handle BigInt chainId properly
+          const detectedChain = typeof network.chainId === 'bigint' 
+            ? Number(network.chainId) 
+            : Number(network.chainId);
           setWalletChainId(detectedChain);
 
           const expectedNetwork = NETWORKS[targetNetworkKey];
@@ -456,7 +526,7 @@ function App() {
           return false;
         }
       },
-      [selectedNetwork]
+      [selectedNetwork, walletType]
   );
 
   const initProvider = useCallback(async () => {
@@ -1004,16 +1074,18 @@ function App() {
 
       const isCorrect = await checkNetwork(newProvider, selectedNetwork);
       if (!isCorrect) {
+        // Don't return early - allow user to see the switch network button
+        // The networkCorrect state is already set to false by checkNetwork
         const walletName = detectedType === 'rabby' ? 'Rabby Wallet' : 'MetaMask';
         showMessage(`Please switch ${walletName} to ${selectedNetworkConfig.label}`, "error");
-        return;
+        // Still initialize contract if possible, but networkCorrect will show the switch button
+      } else {
+        await initContract(newProvider, selectedAccount, selectedNetwork);
+        const walletName = detectedType === 'rabby' ? 'Rabby Wallet' : 'MetaMask';
+        showMessage(`${walletName} connected`, "success");
       }
-
-      await initContract(newProvider, selectedAccount, selectedNetwork);
+      
       setIsDisconnecting(false); // Сбрасываем флаг при успешном подключении
-
-      const walletName = detectedType === 'rabby' ? 'Rabby Wallet' : 'MetaMask';
-      showMessage(`${walletName} connected`, "success");
     } catch (err) {
       setIsDisconnecting(false); // Сбрасываем флаг даже при ошибке
       showMessage("Failed to connect wallet", "error");
@@ -1043,6 +1115,7 @@ function App() {
         if (!targetConfig) return;
 
         try {
+          setIsSwitchingNetwork(true);
           setLoading((prev) => ({ ...prev, network: true }));
 
           if (walletType === 'walletconnect') {
@@ -1062,10 +1135,18 @@ function App() {
             }
 
             setNetworkCorrect(true);
+            
+            // Reinitialize contract and fetch stats for the new network
+            if (account) {
+              await fetchWalletConnectState(targetNetworkKey);
+            } else {
+              // If no account, still fetch network stats
+              await fetchSelectedNetworkStats();
+            }
+            
             if (showToast) {
               showMessage(`Switched to ${targetConfig.label}`, "success");
             }
-            await fetchWalletConnectState(targetNetworkKey);
             return;
           }
 
@@ -1083,38 +1164,167 @@ function App() {
             }
 
             try {
-              await ethereumProvider.request({
-                method: "wallet_switchEthereumChain",
-                params: [{ chainId: targetConfig.chainHex }],
-              });
-            } catch (switchError) {
-              if (switchError.code === 4902) {
-                await ethereumProvider.request({
-                  method: "wallet_addEthereumChain",
-                  params: [{
-                    chainId: targetConfig.chainHex,
-                    chainName: `${targetConfig.label}`,
-                    rpcUrls: targetConfig.rpcUrls,
-                    nativeCurrency: { name: "Monad", symbol: "MON", decimals: 18 },
-                    blockExplorerUrls: [targetConfig.explorerUrl],
-                  }],
-                });
-              } else {
-                throw switchError;
+              // Check current chainId before switching
+              const currentChainIdHex = await ethereumProvider.request({ method: 'eth_chainId' });
+              const currentChainId = parseInt(currentChainIdHex, 16);
+              
+              // If already on the target network, just verify and return
+              if (currentChainId === targetConfig.chainId) {
+                const updatedProvider = new ethers.BrowserProvider(ethereumProvider);
+                setProvider(updatedProvider);
+                await checkNetwork(updatedProvider, targetNetworkKey);
+                if (account) {
+                  await initContract(updatedProvider, account, targetNetworkKey);
+                }
+                await fetchSelectedNetworkStats();
+                if (showToast) {
+                  showMessage(`Already on ${targetConfig.label}`, "info");
+                }
+                return;
               }
-            }
 
-            const updatedProvider = new ethers.BrowserProvider(ethereumProvider);
-            setProvider(updatedProvider);
-            await checkNetwork(updatedProvider, targetNetworkKey);
-            if (account) await initContract(updatedProvider, account, targetNetworkKey);
-            // Ensure stats are refreshed after network switch
-            // fetchSelectedNetworkStats will be called automatically via useEffect when selectedNetwork changes
-            // but we also ensure it's called here for immediate update
-            if (showToast) {
-              showMessage(`Switched to ${targetConfig.label}`, "success");
+              // Set up a promise to wait for chainChanged event
+              let chainChangedResolve;
+              let chainChangedReject;
+              const chainChangedPromise = new Promise((resolve, reject) => {
+                chainChangedResolve = resolve;
+                chainChangedReject = reject;
+              });
+
+              // Set up chainChanged listener with timeout
+              let timeoutId;
+              const chainChangedHandler = () => {
+                if (timeoutId) clearTimeout(timeoutId);
+                chainChangedResolve();
+              };
+              
+              timeoutId = setTimeout(() => {
+                ethereumProvider.removeListener("chainChanged", chainChangedHandler);
+                chainChangedReject(new Error("Network switch timeout"));
+              }, 10000); // 10 second timeout
+
+              ethereumProvider.on("chainChanged", chainChangedHandler);
+
+              try {
+                // Request network switch
+                await ethereumProvider.request({
+                  method: "wallet_switchEthereumChain",
+                  params: [{ chainId: targetConfig.chainHex }],
+                });
+              } catch (switchError) {
+                // Clean up listener and timeout
+                if (timeoutId) clearTimeout(timeoutId);
+                ethereumProvider.removeListener("chainChanged", chainChangedHandler);
+                
+                // Handle network not added error
+                if (switchError.code === 4902) {
+                  try {
+                    // Set up new listener for the add+switch flow
+                    const addChainChangedHandler = () => {
+                      if (timeoutId) clearTimeout(timeoutId);
+                      chainChangedResolve();
+                    };
+                    timeoutId = setTimeout(() => {
+                      ethereumProvider.removeListener("chainChanged", addChainChangedHandler);
+                      chainChangedReject(new Error("Network switch timeout"));
+                    }, 10000);
+                    ethereumProvider.on("chainChanged", addChainChangedHandler);
+                    
+                    await ethereumProvider.request({
+                      method: "wallet_addEthereumChain",
+                      params: [{
+                        chainId: targetConfig.chainHex,
+                        chainName: `${targetConfig.label}`,
+                        rpcUrls: targetConfig.rpcUrls,
+                        nativeCurrency: targetConfig.nativeCurrency,
+                        blockExplorerUrls: [targetConfig.explorerUrl],
+                      }],
+                    });
+                    // After adding, try switching again
+                    await ethereumProvider.request({
+                      method: "wallet_switchEthereumChain",
+                      params: [{ chainId: targetConfig.chainHex }],
+                    });
+                    // Wait for chainChanged event
+                    await chainChangedPromise;
+                    ethereumProvider.removeListener("chainChanged", addChainChangedHandler);
+                  } catch (addError) {
+                    if (timeoutId) clearTimeout(timeoutId);
+                    // Handle user rejection or other errors
+                    if (addError.code === 4001 || addError.message?.includes("reject") || addError.message?.includes("denied")) {
+                      if (showToast) {
+                        showMessage("Network switch rejected", "error");
+                      }
+                      return;
+                    }
+                    throw addError;
+                  }
+                } else if (switchError.code === 4001 || switchError.message?.includes("reject") || switchError.message?.includes("denied")) {
+                  // User rejected the request
+                  if (showToast) {
+                    showMessage("Network switch rejected", "error");
+                  }
+                  return;
+                } else {
+                  throw switchError;
+                }
+              }
+
+              // Wait for chainChanged event (or timeout)
+              try {
+                await chainChangedPromise;
+                if (timeoutId) clearTimeout(timeoutId);
+                ethereumProvider.removeListener("chainChanged", chainChangedHandler);
+              } catch (timeoutError) {
+                // If timeout, check chainId directly
+                ethereumProvider.removeListener("chainChanged", chainChangedHandler);
+                const chainIdHex = await ethereumProvider.request({ method: 'eth_chainId' });
+                const actualChainId = parseInt(chainIdHex, 16);
+                if (actualChainId !== targetConfig.chainId) {
+                  throw new Error(`Network switch failed. Expected ${targetConfig.chainId}, got ${actualChainId}`);
+                }
+              }
+
+              // Small delay to ensure MetaMask processes the change and closes popup
+              await new Promise(resolve => setTimeout(resolve, 500));
+
+              // Verify the switch was successful
+              const chainIdHex = await ethereumProvider.request({ method: 'eth_chainId' });
+              const actualChainId = parseInt(chainIdHex, 16);
+              
+              if (actualChainId !== targetConfig.chainId) {
+                throw new Error(`Network switch failed. Expected ${targetConfig.chainId}, got ${actualChainId}`);
+              }
+
+              const updatedProvider = new ethers.BrowserProvider(ethereumProvider);
+              setProvider(updatedProvider);
+              
+              // Verify network switch was successful
+              const networkCheckResult = await checkNetwork(updatedProvider, targetNetworkKey);
+              if (!networkCheckResult) {
+                throw new Error("Network verification failed after switch");
+              }
+              
+              // Reinitialize contract with new network (account stays connected)
+              // Account should remain the same - don't reset it
+              if (account) {
+                await initContract(updatedProvider, account, targetNetworkKey);
+              }
+              
+              // Fetch stats for the new network
+              await fetchSelectedNetworkStats();
+              
+              if (showToast) {
+                showMessage(`Switched to ${targetConfig.label}`, "success");
+              }
+              return;
+            } catch (err) {
+              // Clean up any remaining listeners
+              if (err.message !== "Network switch timeout" && err.code !== 4001) {
+                console.error("Network switch error:", err);
+              }
+              throw err;
             }
-            return;
           }
 
           showMessage("No provider available to switch network", "error");
@@ -1124,10 +1334,11 @@ function App() {
             showMessage("Failed to switch network", "error");
           }
         } finally {
+          setIsSwitchingNetwork(false);
           setLoading((prev) => ({ ...prev, network: false }));
         }
       },
-      [selectedNetwork, walletType, switchChain, walletClient, fetchWalletConnectState, showMessage, checkNetwork, initContract, account, openNetworkModal]
+      [selectedNetwork, walletType, switchChain, walletClient, fetchWalletConnectState, fetchSelectedNetworkStats, showMessage, checkNetwork, initContract, account, openNetworkModal]
   );
 
   const vote = useCallback(async (isHappy) => {
@@ -1867,11 +2078,15 @@ function App() {
   useEffect(() => {
     // Если walletType уже установлен как 'metamask', не обрабатываем это как WalletConnect
     if (walletType === 'metamask') return;
+    
+    // Не обрабатываем отключение во время переключения сети
+    if (isSwitchingNetwork) return;
 
     if (!isConnected || !address) {
       if (isDisconnecting) {
         setIsDisconnecting(false);
       }
+      // Только для WalletConnect - не трогаем MetaMask/Rabby
       if (walletType === 'walletconnect') {
         if (account) {
           setAccount(null);
@@ -1984,18 +2199,41 @@ function App() {
     }
 
     const handleAccountsChanged = (accounts) => {
-      if (accounts.length === 0) disconnectWallet();
-      else {
-        setAccount(accounts[0]);
-        if (provider) initContract(provider, accounts[0], selectedNetwork);
+      // Don't process account changes during network switch
+      if (isSwitchingNetwork) return;
+      
+      // Only disconnect if accounts are actually empty (user disconnected)
+      // Don't disconnect on network switch - accounts array should remain the same
+      if (accounts.length === 0) {
+        disconnectWallet();
+      } else {
+        const newAccount = accounts[0];
+        // Only update if account actually changed (not just network switch)
+        if (newAccount.toLowerCase() !== account?.toLowerCase()) {
+          setAccount(newAccount);
+          if (provider) initContract(provider, newAccount, selectedNetwork);
+        }
       }
     };
 
     const handleChainChanged = async () => {
+      // Network changed in wallet - update provider and check network
+      // Don't disconnect wallet, just update state
+      // If we're switching network programmatically, don't process this event
+      // as it will be handled by switchNetwork function
+      if (isSwitchingNetwork) {
+        return;
+      }
+      
       const newProvider = new ethers.BrowserProvider(ethereumProvider);
       setProvider(newProvider);
-      await checkNetwork(newProvider, selectedNetwork);
-      if (account) await initContract(newProvider, account, selectedNetwork);
+      const networkCheckResult = await checkNetwork(newProvider, selectedNetwork);
+      
+      // If network matches selected network, reinitialize contract and fetch stats
+      if (networkCheckResult && account) {
+        await initContract(newProvider, account, selectedNetwork);
+        // Stats will be fetched automatically via useEffect when selectedNetwork matches
+      }
     };
 
     ethereumProvider.on("accountsChanged", handleAccountsChanged);
@@ -2005,7 +2243,7 @@ function App() {
       ethereumProvider.removeListener("accountsChanged", handleAccountsChanged);
       ethereumProvider.removeListener("chainChanged", handleChainChanged);
     };
-  }, [provider, account, initContract, checkNetwork, disconnectWallet, walletType, selectedNetwork]);
+  }, [provider, account, initContract, checkNetwork, disconnectWallet, walletType, selectedNetwork, isSwitchingNetwork]);
 
   useEffect(() => {
     if (provider) checkNetwork(provider, selectedNetwork);

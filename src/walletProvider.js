@@ -86,12 +86,12 @@ const ethMainnet = {
 
 const ethSepolia = {
   id: 11155111,
-  name: 'Sepolia',
+  name: 'Ethereum Sepolia',
   network: 'eth-sepolia',
   nativeCurrency: {
     decimals: 18,
-    name: 'Sepolia',
-    symbol: 'ETH',
+    name: 'Ethereum',
+    symbol: 'SepoliaETH',
   },
   rpcUrls: {
     default: {
@@ -103,7 +103,7 @@ const ethSepolia = {
   },
   blockExplorers: {
     default: {
-      name: 'Sepolia Ethereum',
+      name: 'Ethereum Sepolia',
       url: 'https://sepolia.etherscan.io',
     },
   },
@@ -116,7 +116,7 @@ const baseMainnet = {
   network: 'base-mainnet',
   nativeCurrency: {
     decimals: 18,
-    name: 'Base',
+    name: 'Ethereum',
     symbol: 'ETH',
   },
   rpcUrls: {
